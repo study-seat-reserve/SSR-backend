@@ -1,2 +1,4 @@
 /target
 .env
+logfiles
+*.db3

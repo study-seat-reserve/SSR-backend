@@ -48,9 +48,9 @@ fn handle_unprocessable_entity(_: &Request) -> &'static str {
 async fn main() {
   dotenv().ok();
   /*
-   logger::init_logger(log::LevelFilter::Info);
-   database::init_db();
+  database::init_db();
   */
+  logger::init_logger(log::LevelFilter::Info);
   let catchers = catchers![handle_unprocessable_entity];
   let routes = routes![];
   let server = rocket::build()
