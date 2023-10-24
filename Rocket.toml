@@ -1,0 +1,8 @@
+[debug]
+address = "127.0.0.1"
+port = 8000
+# workers = 16
+# keep_alive = 5
+# log_level = "critical"
+limits = { forms = 1073741824, form = 1073741824, file = 1073741824, data-form = 1073741824 }
+# tls = "disabled"
