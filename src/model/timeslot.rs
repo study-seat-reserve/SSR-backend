@@ -1,6 +1,6 @@
-use chrono::{Duration, Local, NaiveDate, NaiveDateTime, NaiveTime};
+use chrono::{NaiveDate, NaiveTime};
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug)]
 pub struct TimeSlot {
   pub date: NaiveDate,
   pub start_time: NaiveTime,
