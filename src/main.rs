@@ -1,11 +1,11 @@
-mod api;
+// mod api;
 mod database;
 mod logger;
 mod model;
 mod timer;
 mod utils;
 
-use api::*;
+// use api::*;
 use dotenv::dotenv;
 use rocket::{
   self, catch, catchers,
@@ -13,6 +13,10 @@ use rocket::{
   http::Header,
   routes, {Request, Response},
 };
+
+extern crate bcrypt;
+
+use bcrypt::{hash, verify, DEFAULT_COST};
 
 pub struct CORS;
 
@@ -47,6 +51,9 @@ fn handle_unprocessable_entity(_: &Request) -> &'static str {
 #[tokio::main]
 async fn main() {
   dotenv().ok();
+  let hashed = hash("hunter2", DEFAULT_COST).unwrap();
+  let valid = verify("hunter2", &hashed).unwrap();
+  println!("{}  {}", hashed, valid);
   /*
   database::init_db();
   */

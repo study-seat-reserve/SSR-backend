@@ -49,3 +49,22 @@ pub fn date_from_string(date: &str) -> Result<NaiveDate, Error> {
     &format!("Parsing date from str '{}'", date),
   )
 }
+
+/*
+
+fn is_overlapping(slot1: &str, slot2: &str) -> bool {
+    let (start1, end1) = parse_slot(slot1);
+    let (start2, end2) = parse_slot(slot2);
+
+    max(start1, start2) < min(end1, end2)
+}
+
+fn parse_slot(slot: &str) -> (i32, i32) {
+    let times: Vec<&str> = slot.split('-').collect();
+    let start = times[0].replace(":", "").parse::<i32>().unwrap();
+    let end = times[1].replace(":", "").parse::<i32>().unwrap();
+
+    (start, end)
+}
+
+*/
