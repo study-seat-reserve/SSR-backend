@@ -51,12 +51,11 @@ fn handle_unprocessable_entity(_: &Request) -> &'static str {
 #[tokio::main]
 async fn main() {
   dotenv().ok();
-  let hashed = hash("hunter2", DEFAULT_COST).unwrap();
-  let valid = verify("hunter2", &hashed).unwrap();
-  println!("{}  {}", hashed, valid);
-  /*
+  // let hashed = hash("hunter2", DEFAULT_COST).unwrap();
+  // let valid = verify("hunter2", &hashed).unwrap();
+  // println!("{}  {}", hashed, valid);
   database::init_db();
-  */
+
   logger::init_logger(log::LevelFilter::Info);
   let catchers = catchers![handle_unprocessable_entity];
   let routes = routes![];
@@ -69,6 +68,6 @@ async fn main() {
 
   tokio::select! {
       _ = server => {},
-      _ = tokio::signal::ctrl_c() => {},
+      // _ = tokio::signal::ctrl_c() => {},
   }
 }

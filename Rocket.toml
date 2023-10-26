@@ -3,6 +3,7 @@ address = "127.0.0.1"
 port = 8002
 # workers = 16
 # keep_alive = 5
-# log_level = "critical"
+log_level = "normal"
 limits = { forms = 1073741824, form = 1073741824, file = 1073741824, data-form = 1073741824 }
+shutdown = { ctrlc = "true", force = "true" }
 # tls = "disabled"

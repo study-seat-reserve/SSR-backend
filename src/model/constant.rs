@@ -1,1 +1,1 @@
-pub static NUMBER_OF_SEAT: u8 = 50;
+pub static NUMBER_OF_SEAT: u16 = 50;
