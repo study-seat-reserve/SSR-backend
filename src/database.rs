@@ -1,29 +1,29 @@
 /*
 座位表 (Seat)
-seat_id (主鍵)
-OtherInfo
+seat_id (pk)
+other_info
 
 用戶表 (Users)
-user_id (主鍵)
+id (pk)
+user_id
 user_name
-Password_hash
+password_hash
 blacklist
 email
 
 預約表 (Reservations)
-ReservationID (主鍵)
-user_id (外鍵)
-seat_id (外鍵)
-Date (考慮到日期)
-StartTime
-EndTime
+user_id (pk、fk)
+seat_id (pk、fk)
+date (pk)
+start_time
+end_time
 
 
 時段表 (TimeSlots)
-Date (主鍵)
-StartTime (例如: 09:00)
-EndTime (例如: 09:30)
-Availability (bool)
+date (pk)
+start_time
+end_time
+availability (bool)
 
 trigger?
 */
@@ -31,19 +31,22 @@ trigger?
 use chrono::{NaiveDate, NaiveTime};
 use rusqlite::{params, Connection, Result};
 use std::env;
-use uuid::Uuid;
+
+use bcrypt::{hash, DEFAULT_COST};
 
 use crate::{
-  model::{constant, seat},
+  model::{constant::*, *},
   utils::*,
 };
 
-fn connect_to_db() -> Result<Connection, Error> {
+fn connect_to_db() -> Result<Connection> {
+  log::info!("Connecting to db");
+
   let root = env::var("ROOT").expect("Failed to get root path");
   let path = format!("{}/SSR.db3", root);
   log::debug!("path={}", path);
 
-  handle(Connection::open(path), "DB Connect")
+  Connection::open(path)
 }
 
 // 初始化
@@ -80,7 +83,7 @@ pub fn init_db() {
          id INTEGER PRIMARY KEY AUTOINCREMENT,
          user_id TEXT NOT NULL UNIQUE,
          user_name TEXT NOT NULL UNIQUE,
-         Password_hash TEXT NOT NULL,
+         password_hash TEXT NOT NULL,
          blacklist INTEGER DEFAULT 0,
          email TEXT NOT NULL UNIQUE
      )",
@@ -96,9 +99,9 @@ pub fn init_db() {
       "CREATE TABLE IF NOT EXISTS Reservations (
          user_id TEXT NOT NULL,
          seat_id INTEGER NOT NULL,
-         Date TEXT NOT NULL,
-         StartTime TEXT NOT NULL,
-         EndTime TEXT NOT NULL,
+         date TEXT NOT NULL,
+         start_time TEXT NOT NULL,
+         end_time TEXT NOT NULL,
          PRIMARY KEY (user_id, seat_id, Date),
          FOREIGN KEY(user_id) REFERENCES Users(user_id),
          FOREIGN KEY(seat_id) REFERENCES Seat(seat_id)
@@ -113,10 +116,10 @@ pub fn init_db() {
   conn
     .execute(
       "CREATE TABLE IF NOT EXISTS TimeSlots (
-         Date TEXT PRIMARY KEY,
-         StartTime TEXT NOT NULL,
-         EndTime TEXT NOT NULL,
-         Availability INTEGER DEFAULT 1
+         date TEXT PRIMARY KEY,
+         start_time TEXT NOT NULL,
+         end_time TEXT NOT NULL,
+         availability INTEGER DEFAULT 1
      )",
       [],
     )
@@ -152,7 +155,53 @@ fn init_seat_info(conn: &Connection) {
 }
 
 // 註冊
-pub fn insert_new_user_info() {}
+pub fn insert_new_user_info(user: user::User, user_id: &str) -> Result<(), Status> {
+  log::info!("Inserting new user information");
+
+  let password_hash = handle(hash(user.password, DEFAULT_COST), "Hashing password")?;
+
+  let conn = handle(connect_to_db(), "Connecting to db")?;
+
+  handle(
+    conn.execute(
+      "INSERT INTO Users (user_id, user_name, password_hash, blacklist, email) VALUES (?1, ?2, ?3, ?4, ?5)",
+      params![user_id, user.user_name, password_hash, 0, user.email],
+    ),
+    "Inserting new user information",
+  )?;
+
+  log::info!("Insertion completed successfully");
+  Ok(())
+}
+
+// 檢查用戶名
+pub fn check_if_user_name_exists(user_name: &str) -> Result<bool, Status> {
+  log::info!(
+    "Checking if username: '{}' exists in the database.",
+    user_name
+  );
+
+  let conn = handle(connect_to_db(), "Connecting to db")?;
+
+  let count: u64 = handle(
+    conn.query_row(
+      "SELECT COUNT(*) FROM Users WHERE user_name = ?1",
+      params![user_name],
+      |row| row.get(0),
+    ),
+    "Querying select operation",
+  )?;
+
+  if count > 0 {
+    log::debug!("username: {} exists", user_name);
+
+    Ok(true)
+  } else {
+    log::debug!("username: {} does not exist", user_name);
+
+    Ok(false)
+  }
+}
 
 // 登入
 pub fn login() {}

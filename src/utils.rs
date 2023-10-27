@@ -1,26 +1,75 @@
 // use crate::model::constant::*;
 use chrono::{Duration, Local, NaiveDate, NaiveDateTime};
-use rand::Rng;
 use reqwest;
-use std::cmp::{max, min};
-pub use std::io::{Error, ErrorKind};
+pub use rocket::http::Status;
+use rusqlite::{Error as SqliteError, ErrorCode};
+use validator::ValidationErrorsKind;
+
 use std::{
+  cmp::{max, min},
   collections::HashMap,
   env,
   fs::{self, File},
+  io::{Error, ErrorKind},
   path::{Path, PathBuf},
   time::{SystemTime, UNIX_EPOCH},
 };
 
-pub fn handle<T, E>(result: Result<T, E>, prefix: &str) -> Result<T, Error>
+pub fn handle<T, E>(result: Result<T, E>, prefix: &str) -> Result<T, Status>
 where
-  E: std::error::Error,
+  E: std::error::Error + 'static,
 {
-  result.map_err(|e| {
-    log::error!("{} failed with error: {:?}", prefix, e);
+  result.map_err(|err| {
+    log::error!("{} failed with error: {:?}", prefix, err);
 
-    let err_msg = format!("{} failed", prefix);
-    Error::new(ErrorKind::Other, err_msg)
+    let dyn_error: &dyn std::error::Error = &err;
+
+    if let Some(e) = dyn_error.downcast_ref::<std::io::Error>() {
+      match e.kind() {
+        ErrorKind::NotFound => Status::NotFound,
+        ErrorKind::PermissionDenied => Status::Forbidden,
+        ErrorKind::ConnectionRefused => Status::ServiceUnavailable,
+        _ => Status::InternalServerError,
+      }
+    } else if let Some(e) = dyn_error.downcast_ref::<rusqlite::Error>() {
+      match e {
+        SqliteError::SqliteFailure(se, _) => match se.code {
+          ErrorCode::ConstraintViolation | ErrorCode::TypeMismatch => Status::UnprocessableEntity,
+          ErrorCode::PermissionDenied => Status::Forbidden,
+          ErrorCode::NotFound => Status::NotFound,
+          ErrorCode::DatabaseBusy | ErrorCode::DatabaseLocked => Status::ServiceUnavailable,
+          _ => Status::InternalServerError,
+        },
+        _ => Status::InternalServerError,
+      }
+    } else {
+      Status::InternalServerError
+    }
+  })
+}
+
+pub fn handle_validator(result: Result<(), validator::ValidationErrors>) -> Result<(), Status> {
+  result.map_err(|validation_errors| {
+    let error_message: Vec<String> = validation_errors
+      .errors()
+      .into_iter()
+      .map(|(field, validation_error_kind)| {
+        let msg: Vec<String> =
+          if let ValidationErrorsKind::Field(validation_error) = validation_error_kind {
+            validation_error
+              .into_iter()
+              .map(|error| format!("Invalid {} Error: {}", field, error.code))
+              .collect()
+          } else {
+            Vec::new()
+          };
+        return msg.join(", ");
+      })
+      .collect();
+
+    log::error!("{}", error_message.join(", "));
+
+    Status::UnprocessableEntity
   })
 }
 
@@ -44,7 +93,7 @@ pub fn get_last_week() -> NaiveDate {
   seven_days_ago
 }
 
-pub fn date_from_string(date: &str) -> Result<NaiveDate, Error> {
+pub fn date_from_string(date: &str) -> Result<NaiveDate, Status> {
   handle(
     NaiveDate::parse_from_str(date, "%Y-%m-%d"),
     &format!("Parsing date from str '{}'", date),

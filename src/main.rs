@@ -1,11 +1,11 @@
-// mod api;
+mod api;
 mod database;
 mod logger;
 mod model;
 mod timer;
 mod utils;
 
-// use api::*;
+use api::*;
 use dotenv::dotenv;
 use rocket::{
   self, catch, catchers,
@@ -13,10 +13,6 @@ use rocket::{
   http::Header,
   routes, {Request, Response},
 };
-
-extern crate bcrypt;
-
-use bcrypt::{hash, verify, DEFAULT_COST};
 
 pub struct CORS;
 
@@ -40,25 +36,38 @@ impl Fairing for CORS {
   }
 }
 
-/*
-422: 資料格式不正確
-*/
 #[catch(422)]
 fn handle_unprocessable_entity(_: &Request) -> &'static str {
-  "Unprocessable Entity"
+  // 請求格是錯誤
+  "The request contains invalid parameters"
+}
+#[catch(403)]
+fn handle_forbidden(_: &Request) -> &'static str {
+  "You don't have permission to access this resource"
+}
+#[catch(404)]
+fn handle_not_found(_: &Request) -> &'static str {
+  "The resource was not found"
+}
+#[catch(500)]
+fn handle_internal_server_error(_: &Request) -> &'static str {
+  "Something went wrong"
+}
+#[catch(503)]
+fn handle_service_unavailable(_: &Request) -> &'static str {
+  // 伺服器當前無法處理請求
+  "The server is currently unable to handle the request"
 }
 
 #[tokio::main]
 async fn main() {
   dotenv().ok();
-  // let hashed = hash("hunter2", DEFAULT_COST).unwrap();
-  // let valid = verify("hunter2", &hashed).unwrap();
-  // println!("{}  {}", hashed, valid);
+
   database::init_db();
 
   logger::init_logger(log::LevelFilter::Info);
   let catchers = catchers![handle_unprocessable_entity];
-  let routes = routes![];
+  let routes = routes![register];
   let server = rocket::build()
     .register("/", catchers)
     .mount("/", routes)
