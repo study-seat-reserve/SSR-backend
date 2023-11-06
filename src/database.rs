@@ -28,7 +28,8 @@ availability (bool)
 trigger?
 */
 
-use chrono::{NaiveDate, NaiveTime};
+use chrono::{Local, NaiveDate, NaiveTime};
+use rocket::data;
 use rusqlite::{params, Connection, Result};
 use std::env;
 
@@ -115,20 +116,20 @@ pub fn init_db() {
 
   conn
     .execute(
-      "CREATE TABLE IF NOT EXISTS TimeSlots (
-         date TEXT PRIMARY KEY,
+      "CREATE TABLE IF NOT EXISTS UnavailableTimeSlots (
+         date TEXT NOT NULL,
          start_time TEXT NOT NULL,
          end_time TEXT NOT NULL,
-         availability INTEGER DEFAULT 1
+         PRIMARY KEY (date, start_time, end_time)
      )",
       [],
     )
     .unwrap_or_else(|e| {
-      log::error!("Failed to create TimeSlots table: {}", e);
-      panic!("Failed to create TimeSlots table");
+      log::error!("Failed to create UnavailableTimeSlots table: {}", e);
+      panic!("Failed to create UnavailableTimeSlots table");
     });
 
-  log::info!("Initialization completed successfully");
+  log::info!("successfully initialized db");
 }
 
 fn init_seat_info(conn: &Connection) {
@@ -170,14 +171,14 @@ pub fn insert_new_user_info(user: user::User, user_id: &str) -> Result<(), Statu
     "Inserting new user information",
   )?;
 
-  log::info!("Insertion completed successfully");
+  log::info!("Successfully inserted new user information");
   Ok(())
 }
 
 // 檢查用戶名
 pub fn check_if_user_name_exists(user_name: &str) -> Result<bool, Status> {
   log::info!(
-    "Checking if username: '{}' exists in the database.",
+    "Checking if username: '{}' exists in the database",
     user_name
   );
 
@@ -206,8 +207,65 @@ pub fn check_if_user_name_exists(user_name: &str) -> Result<bool, Status> {
 // 登入
 pub fn login() {}
 
-// 查詢特定所有位置在特定時間點狀態
-pub fn show_status_of_all_seats_by_time(start: NaiveTime, end: NaiveTime) {}
+// 查詢所有位置在特定時間點狀態
+pub fn get_all_seats_status(
+  date: &str,
+  start_time: &str,
+  end_time: &str,
+) -> Result<seat::AllSeatsStatus, Status> {
+  log::info!("Getting current seats status");
+
+  let conn = handle(connect_to_db(), "Connecting to db")?;
+
+  let mut stmt = handle(
+    conn.prepare(
+      "SELECT 
+      Seat.seat_id,
+      CASE
+        WHEN Reservations.seat_id IS NULL THEN 'Available'
+        ELSE 'Borrowed'
+      END as ReservationStatus
+    FROM 
+      Seat
+    LEFT JOIN Reservations ON 
+      Seat.seat_id = Reservations.seat_id AND
+      Reservations.date = ? AND
+      Reservations.start_time <= ? AND
+      Reservations.end_time >= ?
+      ",
+    ),
+    "Selecting seat_id",
+  )?;
+
+  let seat_status_iter = handle(
+    stmt.query_map(params![date, start_time, end_time], |row| {
+      let seat_id: u16 = row.get(0)?;
+      let status_str: String = row.get(1)?;
+      let status = match status_str.as_str() {
+        "Available" => seat::Status::Available,
+        "Borrowed" => seat::Status::Borrowed,
+        _ => return Err(rusqlite::Error::InvalidQuery),
+      };
+
+      Ok(seat::SeatStatus {
+        seat_id: seat_id,
+        status: status,
+      })
+    }),
+    "Query mapping",
+  )?;
+
+  let seats_vec: Vec<seat::SeatStatus> =
+    handle(seat_status_iter.collect(), "Collecting seats status")?;
+
+  let all_seats_status = seat::AllSeatsStatus { seats: seats_vec };
+
+  log::info!("Successfully got current seats status");
+
+  Ok(all_seats_status)
+}
+
+pub fn get_seats_status_by_time(start: NaiveTime, end: NaiveTime) {}
 
 // 查詢特定位置狀態
 pub fn show_status_of_the_seat(id: u16) {}

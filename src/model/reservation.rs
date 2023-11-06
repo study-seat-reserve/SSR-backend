@@ -1,4 +1,5 @@
 use chrono::{NaiveDate, NaiveTime};
+use rocket::request::FromParam;
 
 #[derive(Debug)]
 pub struct Reservation {
