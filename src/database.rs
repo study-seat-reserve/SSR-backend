@@ -279,14 +279,12 @@ pub fn reserve_seat(
   user_id: String,
   seat_id: u16,
   date: NaiveDate,
-  start_time: NaiveTime,
-  end_time: NaiveTime,
+  start_time: u32,
+  end_time: u32,
 ) -> Result<(), Status> {
   log::info!("Reserving a seat for user_id: {}", user_id);
 
   let conn = handle(connect_to_db(), "Connecting to db")?;
-  let start_time = parse_time(start_time)?;
-  let end_time = parse_time(end_time)?;
 
   handle(
     conn.execute(
@@ -303,10 +301,10 @@ pub fn reserve_seat(
 pub fn is_overlapping_with_other_reservation(
   seat_id: u16,
   date: NaiveDate,
-  start_time: NaiveTime,
-  end_time: NaiveTime,
+  start_time: u32,
+  end_time: u32,
 ) -> Result<bool, Status> {
-  log::debug!(
+  log::info!(
     "Checking for overlapping reservations for seat_id: {}, date: {}, start_time: {}, end_time: {}",
     seat_id,
     date,
@@ -315,8 +313,6 @@ pub fn is_overlapping_with_other_reservation(
   );
 
   let conn = handle(connect_to_db(), "Connecting to db")?;
-  let start_time = parse_time(start_time)?;
-  let end_time = parse_time(end_time)?;
 
   let mut stmt = handle(
     conn.prepare(
@@ -344,10 +340,10 @@ pub fn is_overlapping_with_other_reservation(
 
 pub fn is_overlapping_with_unavailable_timeslot(
   date: NaiveDate,
-  start_time: NaiveTime,
-  end_time: NaiveTime,
+  start_time: u32,
+  end_time: u32,
 ) -> Result<bool, Status> {
-  log::debug!(
+  log::info!(
     "Checking for overlapping unavailable time slots for date: {}, start_time: {}, end_time: {}",
     date,
     start_time,
@@ -355,8 +351,6 @@ pub fn is_overlapping_with_unavailable_timeslot(
   );
 
   let conn = handle(connect_to_db(), "Connecting to db")?;
-  let start_time = parse_time(start_time)?;
-  let end_time = parse_time(end_time)?;
 
   let mut stmt = handle(
     conn.prepare(

@@ -117,6 +117,8 @@ pub fn date_from_string(date: &str) -> Result<NaiveDate, Status> {
 
 pub fn parse_time(time: NaiveTime) -> Result<u32, Status> {
   let time_string = format!("{:02}{:02}{:02}", time.hour(), time.minute(), time.second());
-  // let time_str = time.to_string();
+
+  println!("time_string: {}", time_string);
+
   handle(time_string.parse::<u32>(), "Parsing time")
 }
