@@ -208,16 +208,8 @@ pub fn check_if_user_name_exists(user_name: &str) -> Result<bool, Status> {
 pub fn login() {}
 
 // 查詢所有位置在特定時間點狀態
-pub fn get_all_seats_status(
-  date: NaiveDate,
-  start_time: NaiveTime,
-  end_time: NaiveTime,
-) -> Result<seat::AllSeatsStatus, Status> {
+pub fn get_all_seats_status(date: NaiveDate, time: u32) -> Result<seat::AllSeatsStatus, Status> {
   log::info!("Getting current seats status");
-
-  let date = date.to_string();
-  let start_time = parse_time(start_time)?;
-  let end_time = parse_time(end_time)?;
 
   let conn = handle(connect_to_db(), "Connecting to db")?;
 
@@ -235,7 +227,63 @@ pub fn get_all_seats_status(
       Seat.seat_id = Reservations.seat_id AND
       Reservations.date = ? AND
       Reservations.start_time <= ? AND
-      Reservations.end_time >= ?
+      Reservations.end_time > ?
+      ",
+    ),
+    "Selecting seat_id",
+  )?;
+
+  let seat_status_iter = handle(
+    stmt.query_map(params![date, time, time], |row| {
+      let seat_id: u16 = row.get(0)?;
+      let status_str: String = row.get(1)?;
+      let status = match status_str.as_str() {
+        "Available" => seat::Status::Available,
+        "Borrowed" => seat::Status::Borrowed,
+        _ => return Err(rusqlite::Error::InvalidQuery),
+      };
+
+      Ok(seat::SeatStatus {
+        seat_id: seat_id,
+        status: status,
+      })
+    }),
+    "Query mapping",
+  )?;
+
+  let seats_vec: Vec<seat::SeatStatus> =
+    handle(seat_status_iter.collect(), "Collecting seats status")?;
+
+  let all_seats_status = seat::AllSeatsStatus { seats: seats_vec };
+
+  log::info!("Successfully got current seats status");
+
+  Ok(all_seats_status)
+}
+
+pub fn get_seats_status_by_time(
+  date: NaiveDate,
+  start_time: u32,
+  end_time: u32,
+) -> Result<seat::AllSeatsStatus, Status> {
+  log::info!("Getting seats status by time");
+
+  let conn = handle(connect_to_db(), "Connecting to db")?;
+
+  let mut stmt = handle(
+    conn.prepare(
+      "SELECT DISTINCT 
+      Seat.seat_id,
+      CASE
+        WHEN Reservations.seat_id IS NULL THEN 'Available'
+        ELSE 'Borrowed'
+      END as ReservationStatus
+    FROM 
+      Seat
+    LEFT JOIN Reservations ON 
+      Seat.seat_id = Reservations.seat_id AND
+      Reservations.date = ? AND
+      (MAX(?, start_time) < MIN(?, end_time))
       ",
     ),
     "Selecting seat_id",
@@ -264,12 +312,10 @@ pub fn get_all_seats_status(
 
   let all_seats_status = seat::AllSeatsStatus { seats: seats_vec };
 
-  log::info!("Successfully got current seats status");
+  log::info!("Successfully got seats status by time");
 
   Ok(all_seats_status)
 }
-
-pub fn get_seats_status_by_time(start: NaiveTime, end: NaiveTime) {}
 
 // 查詢特定位置狀態
 pub fn show_status_of_the_seat(id: u16) {}

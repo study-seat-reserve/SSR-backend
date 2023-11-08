@@ -1,6 +1,6 @@
 use super::constant::*;
 use crate::utils::parse_time;
-use chrono::{Duration, Local, NaiveDate, NaiveTime};
+use chrono::{Duration, Local, NaiveDate};
 use serde::{Deserialize, Serialize};
 use validator::{Validate, ValidationError};
 

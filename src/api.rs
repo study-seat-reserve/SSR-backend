@@ -42,13 +42,13 @@ pub async fn login() {
 // 查詢當前所有位置狀態
 #[get("/api/show_status")]
 pub async fn show_current_seats_status() -> Result<String, Status> {
-  let now = Local::now();
-  let date = now.date_naive();
-  let time = now.time();
-
   log::info!("Show current seats status");
 
-  let all_seats_status = database::get_all_seats_status(date, time, time)?;
+  let now = Local::now();
+  let date = now.date_naive();
+  let time = parse_time(now.time())?;
+
+  let all_seats_status = database::get_all_seats_status(date, time)?;
 
   let json = handle(
     serde_json::to_string(&all_seats_status),
@@ -62,22 +62,25 @@ pub async fn show_current_seats_status() -> Result<String, Status> {
 
 // 查詢當前所有位置狀態 + filter
 #[get("/api/show_status/<date>/<start_time>/<end_time>")]
-pub async fn show_all_seats_status_by_time(
+pub async fn show_seats_status_by_time(
   date: &str,
-  start_time: &str,
-  end_time: &str,
-) -> Result<(), Status> {
+  start_time: u32,
+  end_time: u32,
+) -> Result<String, Status> {
+  log::info!("Show seats status by time");
+
   let date = handle(NaiveDate::parse_from_str(date, "%Y-%m-%d"), "Parsing date")?;
-  let start_time = handle(
-    NaiveTime::parse_from_str(start_time, "%H:%M:%S"),
-    "Parsing time",
-  )?;
-  let end_time = handle(
-    NaiveTime::parse_from_str(end_time, "%H:%M:%S"),
-    "Parsing time",
+
+  let all_seats_status = database::get_seats_status_by_time(date, start_time, end_time)?;
+
+  let json = handle(
+    serde_json::to_string(&all_seats_status),
+    "Serialize the data as a String of JSON",
   )?;
 
-  Ok(())
+  log::info!("Show seats status by time successfully");
+
+  Ok(json)
 }
 
 // 查詢當前特定位置預約狀態

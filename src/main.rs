@@ -66,8 +66,19 @@ async fn main() {
   database::init_db();
 
   logger::init_logger(log::LevelFilter::Info);
-  let catchers = catchers![handle_unprocessable_entity];
-  let routes = routes![register, show_current_seats_status, reserve_seat];
+  let catchers = catchers![
+    handle_unprocessable_entity,
+    handle_forbidden,
+    handle_not_found,
+    handle_internal_server_error,
+    handle_service_unavailable
+  ];
+  let routes = routes![
+    register,
+    show_current_seats_status,
+    reserve_seat,
+    show_seats_status_by_time
+  ];
   let server = rocket::build()
     .register("/", catchers)
     .mount("/", routes)
