@@ -41,11 +41,6 @@ fn handle_unprocessable_entity(_: &Request) -> &'static str {
   // 請求格式錯誤
   "The request contains invalid parameters"
 }
-#[catch(423)]
-fn handle_user_name_exist(_: &Request) -> &'static str {
-  // 使用者名稱重複
-  "The username is already exist"
-}
 #[catch(403)]
 fn handle_forbidden(_: &Request) -> &'static str {
   "You don't have permission to access this resource"
@@ -72,7 +67,7 @@ async fn main() {
 
   logger::init_logger(log::LevelFilter::Info);
   let catchers = catchers![handle_unprocessable_entity];
-  let routes = routes![register, show_current_seats_status];
+  let routes = routes![register, show_current_seats_status, reserve_seat];
   let server = rocket::build()
     .register("/", catchers)
     .mount("/", routes)

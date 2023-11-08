@@ -101,9 +101,9 @@ pub fn init_db() {
          user_id TEXT NOT NULL,
          seat_id INTEGER NOT NULL,
          date TEXT NOT NULL,
-         start_time TEXT NOT NULL,
-         end_time TEXT NOT NULL,
-         PRIMARY KEY (user_id, seat_id, Date),
+         start_time INTEGER NOT NULL,
+         end_time INTEGER NOT NULL,
+         PRIMARY KEY (user_id, Date),
          FOREIGN KEY(user_id) REFERENCES Users(user_id),
          FOREIGN KEY(seat_id) REFERENCES Seat(seat_id)
      )",
@@ -118,8 +118,8 @@ pub fn init_db() {
     .execute(
       "CREATE TABLE IF NOT EXISTS UnavailableTimeSlots (
          date TEXT NOT NULL,
-         start_time TEXT NOT NULL,
-         end_time TEXT NOT NULL,
+         start_time INTEGER NOT NULL,
+         end_time INTEGER NOT NULL,
          PRIMARY KEY (date, start_time, end_time)
      )",
       [],
@@ -140,8 +140,8 @@ fn init_seat_info(conn: &Connection) {
       panic!("Failed to create TimeSlots table");
     });
 
-  if count != constant::NUMBER_OF_SEAT {
-    for i in 1..=constant::NUMBER_OF_SEAT {
+  if count != constant::NUMBER_OF_SEATS {
+    for i in 1..=constant::NUMBER_OF_SEATS {
       conn
         .execute(
           "INSERT INTO Seat (seat_id, other_info) VALUES (?1, ?2)",
@@ -209,11 +209,15 @@ pub fn login() {}
 
 // 查詢所有位置在特定時間點狀態
 pub fn get_all_seats_status(
-  date: &str,
-  start_time: &str,
-  end_time: &str,
+  date: NaiveDate,
+  start_time: NaiveTime,
+  end_time: NaiveTime,
 ) -> Result<seat::AllSeatsStatus, Status> {
   log::info!("Getting current seats status");
+
+  let date = date.to_string();
+  let start_time = parse_time(start_time)?;
+  let end_time = parse_time(end_time)?;
 
   let conn = handle(connect_to_db(), "Connecting to db")?;
 
@@ -271,12 +275,109 @@ pub fn get_seats_status_by_time(start: NaiveTime, end: NaiveTime) {}
 pub fn show_status_of_the_seat(id: u16) {}
 
 // 預約座位
-pub async fn reserve_seat(
+pub fn reserve_seat(
   user_id: String,
   seat_id: u16,
   date: NaiveDate,
-  start: NaiveTime,
-  end: NaiveTime,
-) {
-  // return status
+  start_time: NaiveTime,
+  end_time: NaiveTime,
+) -> Result<(), Status> {
+  log::info!("Reserving a seat for user_id: {}", user_id);
+
+  let conn = handle(connect_to_db(), "Connecting to db")?;
+  let start_time = parse_time(start_time)?;
+  let end_time = parse_time(end_time)?;
+
+  handle(
+    conn.execute(
+      "INSERT INTO Reservations (user_id, seat_id, date, start_time, end_time) VALUES (?1, ?2, ?3, ?4, ?5)",
+      params![user_id, seat_id, date, start_time, end_time],
+    ),
+    "Inserting new Reservation information",
+  )?;
+
+  log::info!("Successfully reserved a seat for user_id: {}", user_id);
+  Ok(())
+}
+
+pub fn is_overlapping_with_other_reservation(
+  seat_id: u16,
+  date: NaiveDate,
+  start_time: NaiveTime,
+  end_time: NaiveTime,
+) -> Result<bool, Status> {
+  log::debug!(
+    "Checking for overlapping reservations for seat_id: {}, date: {}, start_time: {}, end_time: {}",
+    seat_id,
+    date,
+    start_time,
+    end_time
+  );
+
+  let conn = handle(connect_to_db(), "Connecting to db")?;
+  let start_time = parse_time(start_time)?;
+  let end_time = parse_time(end_time)?;
+
+  let mut stmt = handle(
+    conn.prepare(
+      "SELECT EXISTS(
+        SELECT 1 FROM Reservations
+        WHERE date = ?
+        AND  (MAX(?, start_time) < MIN(?, end_time))
+      )",
+    ),
+    "Selecting overlaping reservations",
+  )?;
+
+  let is_overlapping: bool = handle(
+    stmt.query_row(params![date, start_time, end_time], |row| row.get(0)),
+    "Query mapping",
+  )?;
+
+  if is_overlapping {
+    log::warn!("Found overlapping reservation");
+    return Ok(true);
+  }
+
+  Ok(false)
+}
+
+pub fn is_overlapping_with_unavailable_timeslot(
+  date: NaiveDate,
+  start_time: NaiveTime,
+  end_time: NaiveTime,
+) -> Result<bool, Status> {
+  log::debug!(
+    "Checking for overlapping unavailable time slots for date: {}, start_time: {}, end_time: {}",
+    date,
+    start_time,
+    end_time
+  );
+
+  let conn = handle(connect_to_db(), "Connecting to db")?;
+  let start_time = parse_time(start_time)?;
+  let end_time = parse_time(end_time)?;
+
+  let mut stmt = handle(
+    conn.prepare(
+      "SELECT EXISTS(
+        SELECT 1 FROM UnavailableTimeSlots
+    WHERE date = ?
+    AND (MAX(?, start_time) < MIN(?, end_time))
+      )",
+    ),
+    "Selecting overlaping unavailable time slots",
+  )?;
+
+  let is_overlapping: bool = handle(
+    stmt.query_row(params![date, end_time, start_time], |row| row.get(0)),
+    "Query mapping",
+  )?;
+
+  if is_overlapping {
+    log::warn!("Found overlapping unavailable time slot");
+    return Ok(true);
+  }
+
+  Ok(false)
 }

@@ -1,5 +1,5 @@
 // use crate::model::constant::*;
-use chrono::{Duration, Local, NaiveDate, NaiveDateTime};
+use chrono::{Duration, Local, NaiveDate, NaiveDateTime, NaiveTime, Timelike};
 use reqwest;
 pub use rocket::http::Status;
 use rusqlite::{Error as SqliteError, ErrorCode};
@@ -100,17 +100,23 @@ pub fn date_from_string(date: &str) -> Result<NaiveDate, Status> {
   )
 }
 
-fn is_overlapping(slot1: &str, slot2: &str) -> bool {
-  let (start1, end1) = parse_slot(slot1);
-  let (start2, end2) = parse_slot(slot2);
+// fn is_overlapping(slot1: &str, slot2: &str) -> bool {
+//   let (start1, end1) = parse_slot(slot1);
+//   let (start2, end2) = parse_slot(slot2);
 
-  max(start1, start2) < min(end1, end2)
-}
+//   max(start1, start2) < min(end1, end2)
+// }
 
-fn parse_slot(slot: &str) -> (i32, i32) {
-  let times: Vec<&str> = slot.split('-').collect();
-  let start = times[0].replace(":", "").parse::<i32>().unwrap();
-  let end = times[1].replace(":", "").parse::<i32>().unwrap();
+// fn parse_slot(slot: &str) -> (u32, u32) {
+//   let times: Vec<&str> = slot.split( '-').collect();
+//   let start = times[0].replace(":", "").parse::<u32>().unwrap();
+//   let end = times[1].replace(":", "").parse::<u32>().unwrap();
 
-  (start, end)
+//   (start, end)
+// }
+
+pub fn parse_time(time: NaiveTime) -> Result<u32, Status> {
+  let time_string = format!("{:02}{:02}{:02}", time.hour(), time.minute(), time.second());
+  // let time_str = time.to_string();
+  handle(time_string.parse::<u32>(), "Parsing time")
 }

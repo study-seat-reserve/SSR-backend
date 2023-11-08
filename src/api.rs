@@ -10,9 +10,13 @@ use validator::Validate;
 #[post("/api/register", format = "json", data = "<data>")]
 pub async fn register(data: Json<user::User>) -> Result<(), Status> {
   handle_validator(data.validate())?;
-  if let true = database::check_if_user_name_exists(&data.user_name)? {
+  if database::check_if_user_name_exists(&data.user_name)? {
     return Err(Status::Conflict);
   }
+
+  /* if let true = database::check_if_email_exists(&data.user_name)? {
+    return Err(Status::Conflict);
+  } */
 
   let user_id = Uuid::new_v4().to_string();
 
@@ -40,11 +44,12 @@ pub async fn login() {
 pub async fn show_current_seats_status() -> Result<String, Status> {
   let now = Local::now();
   let date = now.date_naive();
-  let time = now.time().format("%H:%M:%S");
+  let time = now.time();
+  // let time = NaiveTime::parse_from_str(now.time(), "%H:%M:%S");
+
   println!("date: {}, time: {}", date, time);
 
-  let all_seats_status =
-    database::get_all_seats_status(&date.to_string(), &time.to_string(), &time.to_string())?;
+  let all_seats_status = database::get_all_seats_status(date, time, time)?;
 
   let json = handle(
     serde_json::to_string(&all_seats_status),
@@ -78,8 +83,27 @@ pub async fn show_all_seats_status_by_time(
 pub async fn show_specific_seat_status() {}
 
 // 預約座位
-pub async fn reserve_seat() {
-  // return status
+#[post("/api/reserve", format = "json", data = "<reservation>")]
+pub async fn reserve_seat(reservation: Json<reservation::Reservation>) -> Result<(), Status> {
+  handle_validator(reservation.validate())?;
+
+  let reservation_data: reservation::Reservation = reservation.into_inner();
+  let user_id = reservation_data.user_id;
+  let seat_id = reservation_data.seat_id;
+  let date = reservation_data.date;
+  let start_time = reservation_data.start_time;
+  let end_time = reservation_data.end_time;
+
+  if database::is_overlapping_with_other_reservation(seat_id, date, start_time, end_time)? {
+    return Err(Status::Conflict);
+  };
+  if database::is_overlapping_with_unavailable_timeslot(date, start_time, end_time)? {
+    return Err(Status::Conflict);
+  };
+
+  database::reserve_seat(user_id, seat_id, date, start_time, end_time)?;
+
+  Ok(())
 }
 
 // 修改預約時段
@@ -96,3 +120,10 @@ pub async fn delete_reservation_time() {
 pub async fn get_user_reservation_times() {
   // return time
 }
+
+/*
+todo
+1.u32->naivetime
+2.overlap
+3.不能預約比現在要早的時間
+*/
