@@ -45,9 +45,8 @@ pub async fn show_current_seats_status() -> Result<String, Status> {
   let now = Local::now();
   let date = now.date_naive();
   let time = now.time();
-  // let time = NaiveTime::parse_from_str(now.time(), "%H:%M:%S");
 
-  println!("date: {}, time: {}", date, time);
+  log::info!("Show current seats status");
 
   let all_seats_status = database::get_all_seats_status(date, time, time)?;
 
@@ -55,6 +54,8 @@ pub async fn show_current_seats_status() -> Result<String, Status> {
     serde_json::to_string(&all_seats_status),
     "Serialize the data as a String of JSON",
   )?;
+
+  log::info!("Show current seats status successfully");
 
   Ok(json)
 }
@@ -86,13 +87,15 @@ pub async fn show_specific_seat_status() {}
 #[post("/api/reserve", format = "json", data = "<reservation>")]
 pub async fn reserve_seat(reservation: Json<reservation::Reservation>) -> Result<(), Status> {
   handle_validator(reservation.validate())?;
-
   let reservation_data: reservation::Reservation = reservation.into_inner();
+
   let user_id = reservation_data.user_id;
   let seat_id = reservation_data.seat_id;
   let date = reservation_data.date;
   let start_time = reservation_data.start_time;
   let end_time = reservation_data.end_time;
+
+  log::info!("Reserving a seat :{} for user: {}", seat_id, user_id);
 
   if database::is_overlapping_with_other_reservation(seat_id, date, start_time, end_time)? {
     return Err(Status::Conflict);
@@ -101,7 +104,13 @@ pub async fn reserve_seat(reservation: Json<reservation::Reservation>) -> Result
     return Err(Status::Conflict);
   };
 
-  database::reserve_seat(user_id, seat_id, date, start_time, end_time)?;
+  database::reserve_seat(&user_id, seat_id, date, start_time, end_time)?;
+
+  log::info!(
+    "Seat: {} reserved successfully for user_id: {}",
+    seat_id,
+    user_id
+  );
 
   Ok(())
 }

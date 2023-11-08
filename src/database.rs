@@ -276,7 +276,7 @@ pub fn show_status_of_the_seat(id: u16) {}
 
 // 預約座位
 pub fn reserve_seat(
-  user_id: String,
+  user_id: &str,
   seat_id: u16,
   date: NaiveDate,
   start_time: u32,

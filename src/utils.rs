@@ -100,25 +100,9 @@ pub fn date_from_string(date: &str) -> Result<NaiveDate, Status> {
   )
 }
 
-// fn is_overlapping(slot1: &str, slot2: &str) -> bool {
-//   let (start1, end1) = parse_slot(slot1);
-//   let (start2, end2) = parse_slot(slot2);
-
-//   max(start1, start2) < min(end1, end2)
-// }
-
-// fn parse_slot(slot: &str) -> (u32, u32) {
-//   let times: Vec<&str> = slot.split( '-').collect();
-//   let start = times[0].replace(":", "").parse::<u32>().unwrap();
-//   let end = times[1].replace(":", "").parse::<u32>().unwrap();
-
-//   (start, end)
-// }
-
 pub fn parse_time(time: NaiveTime) -> Result<u32, Status> {
   let time_string = format!("{:02}{:02}{:02}", time.hour(), time.minute(), time.second());
-
-  println!("time_string: {}", time_string);
+  log::debug!("Parsing time {:?} to string: {}", time, time_string);
 
   handle(time_string.parse::<u32>(), "Parsing time")
 }
