@@ -1,11 +1,11 @@
 use super::constant::*;
-use crate::utils::*;
+use crate::utils::{get_now, get_today};
 use chrono::{Duration, NaiveDate};
 use serde::{Deserialize, Serialize};
 use validator::{Validate, ValidationError};
 
 #[derive(Debug, Deserialize, Serialize, Validate)]
-#[validate(schema(function = "validate_datetime", skip_on_field_errors = false))]
+#[validate(schema(function = "validate_reservation", skip_on_field_errors = false))]
 pub struct Reservation {
   pub user_id: String,
   #[validate(custom = "validate_seat_id")]
@@ -35,7 +35,7 @@ fn validate_date(date: &NaiveDate) -> Result<(), ValidationError> {
   Ok(())
 }
 
-fn validate_datetime(reservation: &Reservation) -> Result<(), ValidationError> {
+fn validate_reservation(reservation: &Reservation) -> Result<(), ValidationError> {
   let today = get_today();
   let date: NaiveDate = reservation.date;
   let start_time: u32 = reservation.start_time;

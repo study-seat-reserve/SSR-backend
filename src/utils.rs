@@ -1,4 +1,4 @@
-// use crate::model::constant::*;
+use crate::model::constant::*;
 use chrono::{Duration, Local, NaiveDate, NaiveDateTime, NaiveTime, Timelike};
 use reqwest;
 pub use rocket::http::Status;
@@ -97,4 +97,44 @@ pub fn parse_time(time: NaiveTime) -> Result<u32, Status> {
   log::debug!("Parsing time {:?} to string: {}", time, time_string);
 
   handle(time_string.parse::<u32>(), "Parsing time")
+}
+
+pub fn validate_seat_id(seat_id: u16) -> Result<(), Status> {
+  if seat_id < 1 || seat_id > NUMBER_OF_SEATS {
+    log::error!("Invalid seat_id Error: Seat id out of range");
+    return Err(Status::UnprocessableEntity);
+  }
+
+  Ok(())
+}
+
+pub fn validate_date(date: NaiveDate) -> Result<(), Status> {
+  let today = get_today();
+  let three_days_later = today + Duration::days(3);
+
+  if date < today || date > three_days_later {
+    log::error!("Invalid date Error: Invalid reservation date");
+    return Err(Status::UnprocessableEntity);
+  }
+
+  Ok(())
+}
+
+pub fn validate_datetime(date: NaiveDate, start_time: u32, end_time: u32) -> Result<(), Status> {
+  let today = get_today();
+  let now = get_now();
+
+  validate_date(date)?;
+
+  if date == today && start_time < now {
+    log::error!("Invalid start_time: start_time < current time");
+    return Err(Status::UnprocessableEntity);
+  }
+
+  if end_time < start_time {
+    log::error!("Invalid start_time: start time > end time");
+    return Err(Status::UnprocessableEntity);
+  }
+
+  Ok(())
 }

@@ -52,25 +52,3 @@ impl FromStr for Status {
     }
   }
 }
-
-// // API 路由處理函數
-// #[get("/locations_status")]
-// fn locations_status() -> Json<LocationsStatus> {
-//   // 假設這是從某個資料源獲取的數據
-//   let location_statuses = vec![
-//     LocationStatus {
-//       location_id: 1,
-//       status: "Available".to_string(),
-//     },
-//     LocationStatus {
-//       location_id: 2,
-//       status: "Occupied".to_string(),
-//     },
-//     // 其他位置狀態...
-//   ];
-
-//   // 建構 LocationsStatus 結構並封裝為 JSON
-//   Json(LocationsStatus {
-//     locations: location_statuses,
-//   })
-// }

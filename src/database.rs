@@ -425,7 +425,7 @@ pub fn is_overlapping_with_unavailable_timeslot(
   end_time: u32,
 ) -> Result<bool, Status> {
   log::info!(
-    "Checking for overlapping unavailable time slots for date: {}, start_time: {}, end_time: {}",
+    "Checking for overlapping timeslots on date: {}, start_time: {}, end_time: {}",
     date,
     start_time,
     end_time

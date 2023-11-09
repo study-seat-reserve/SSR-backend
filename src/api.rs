@@ -47,6 +47,9 @@ pub async fn show_current_seats_status() -> Result<String, Status> {
   let date = get_today();
   let now = get_now();
 
+  /*
+    Unavailable
+  */
   let all_seats_status = database::get_all_seats_status(date, now)?;
 
   let json = handle(
@@ -69,7 +72,8 @@ pub async fn show_seats_status_by_time(
 ) -> Result<String, Status> {
   log::info!("Show seats status by time");
 
-  let date = handle(NaiveDate::parse_from_str(date, "%Y-%m-%d"), "Parsing date")?;
+  let date = date_from_string(date)?;
+  validate_datetime(date, start_time, end_time)?;
 
   let all_seats_status = database::get_seats_status_by_time(date, start_time, end_time)?;
 
@@ -80,6 +84,13 @@ pub async fn show_seats_status_by_time(
 
   log::info!("Show seats status by time successfully");
 
+  /*
+  如果給定的時間段中有重疊到被預約的時段則回傳
+  Borrowed
+  否則回傳
+  Available
+   */
+
   Ok(json)
 }
 
@@ -89,6 +100,8 @@ pub async fn show_seat_reservations(date: &str, seat_id: u16) -> Result<String, 
   log::info!("Show seats: {} reservations", seat_id);
 
   let date = date_from_string(date)?;
+  validate_date(date)?;
+  validate_seat_id(seat_id)?;
 
   let timeslots = database::get_seat_reservations(date, seat_id)?;
 
@@ -148,10 +161,3 @@ pub async fn delete_reservation_time() {
 pub async fn get_user_reservation_times() {
   // return time
 }
-
-/*
-todo
-1.u32->naivetime
-2.overlap
-3.不能預約比現在要早的時間
-*/
