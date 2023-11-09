@@ -28,8 +28,7 @@ availability (bool)
 trigger?
 */
 
-use chrono::{Local, NaiveDate, NaiveTime};
-use rocket::data;
+use chrono::NaiveDate;
 use rusqlite::{params, Connection, Result};
 use std::env;
 
@@ -318,7 +317,7 @@ pub fn get_seats_status_by_time(
 }
 
 // 查詢特定位置狀態
-pub fn show_status_of_the_seat(id: u16) {}
+pub fn get_specific_seat_status(seat_id: u16) {}
 
 // 預約座位
 pub fn reserve_seat(

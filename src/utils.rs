@@ -73,24 +73,16 @@ pub fn handle_validator(result: Result<(), validator::ValidationErrors>) -> Resu
   })
 }
 
-pub fn get_date() -> NaiveDate {
+pub fn get_today() -> NaiveDate {
   Local::now().date_naive()
+}
+
+pub fn get_now() -> u32 {
+  parse_time(Local::now().naive_local().time()).expect("Parse time 'now' error!")
 }
 
 pub fn get_datetime() -> NaiveDateTime {
   Local::now().naive_local()
-}
-
-pub fn get_tomorrow_midnight() -> NaiveDateTime {
-  let now = Local::now().date_naive().and_hms_opt(0, 0, 0).unwrap();
-  let get_tomorrow_midnight = now + Duration::days(1);
-  get_tomorrow_midnight
-}
-
-pub fn get_last_week() -> NaiveDate {
-  let now = Local::now().date_naive();
-  let seven_days_ago = now - Duration::days(7);
-  seven_days_ago
 }
 
 pub fn date_from_string(date: &str) -> Result<NaiveDate, Status> {

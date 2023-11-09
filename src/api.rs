@@ -1,8 +1,8 @@
 use crate::{database, model::*, utils::*};
 
 use bcrypt::verify;
-use chrono::{Local, NaiveDate, NaiveTime};
-use rocket::{form::Form, fs::NamedFile, get, http::Status, post, serde::json::Json, State};
+use chrono::NaiveDate;
+use rocket::{get, http::Status, post, serde::json::Json, State};
 use uuid::Uuid;
 use validator::Validate;
 
@@ -44,11 +44,10 @@ pub async fn login() {
 pub async fn show_current_seats_status() -> Result<String, Status> {
   log::info!("Show current seats status");
 
-  let now = Local::now();
-  let date = now.date_naive();
-  let time = parse_time(now.time())?;
+  let date = get_today();
+  let now = get_now();
 
-  let all_seats_status = database::get_all_seats_status(date, time)?;
+  let all_seats_status = database::get_all_seats_status(date, now)?;
 
   let json = handle(
     serde_json::to_string(&all_seats_status),
@@ -84,7 +83,7 @@ pub async fn show_seats_status_by_time(
 }
 
 // 查詢當前特定位置預約狀態
-pub async fn show_specific_seat_status() {}
+pub async fn show_specific_seat_status(seat_id: u16) {}
 
 // 預約座位
 #[post("/api/reserve", format = "json", data = "<reservation>")]

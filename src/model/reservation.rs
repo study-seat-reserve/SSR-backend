@@ -1,6 +1,6 @@
 use super::constant::*;
-use crate::utils::parse_time;
-use chrono::{Duration, Local, NaiveDate};
+use crate::utils::*;
+use chrono::{Duration, NaiveDate};
 use serde::{Deserialize, Serialize};
 use validator::{Validate, ValidationError};
 
@@ -25,7 +25,7 @@ fn validate_seat_id(seat_id: u16) -> Result<(), ValidationError> {
 }
 
 fn validate_date(date: &NaiveDate) -> Result<(), ValidationError> {
-  let today = Local::now().date_naive();
+  let today = get_today();
   let three_days_later = today + Duration::days(3);
 
   if *date < today || *date > three_days_later {
@@ -36,11 +36,11 @@ fn validate_date(date: &NaiveDate) -> Result<(), ValidationError> {
 }
 
 fn validate_datetime(reservation: &Reservation) -> Result<(), ValidationError> {
-  let today = Local::now().date_naive();
+  let today = get_today();
   let date: NaiveDate = reservation.date;
   let start_time: u32 = reservation.start_time;
   let end_time: u32 = reservation.end_time;
-  let now = parse_time(Local::now().naive_local().time()).expect("Parse time 'now' error!");
+  let now = get_now();
 
   if date == today && start_time < now {
     return Err(ValidationError::new(

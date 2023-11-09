@@ -19,7 +19,7 @@ pub fn init_logger(level: LevelFilter) {
     fs::create_dir_all(&path).expect("Failed to create logfiles");
   }
 
-  let now = get_date();
+  let now = get_today();
   let file_name = format!("{}/logfiles/{}.txt", root, now);
 
   let file = OpenOptions::new()
