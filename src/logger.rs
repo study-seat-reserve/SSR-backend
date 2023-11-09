@@ -57,7 +57,7 @@ pub fn init_logger(level: LevelFilter) {
 }
 
 fn remove_ansi_escape_codes(s: &str) -> String {
-  let pattern = "\x1B\\[[^m]*m"; // 匹配 ANSI 转义码的正则表达式
+  let pattern = "\x1B\\[[^m]*m";
   regex::Regex::new(pattern)
     .unwrap()
     .replace_all(s, "")

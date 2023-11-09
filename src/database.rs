@@ -1,38 +1,7 @@
-/*
-座位表 (Seat)
-seat_id (pk)
-other_info
-
-用戶表 (Users)
-id (pk)
-user_id
-user_name
-password_hash
-blacklist
-email
-
-預約表 (Reservations)
-user_id (pk、fk)
-seat_id (pk、fk)
-date (pk)
-start_time
-end_time
-
-
-時段表 (TimeSlots)
-date (pk)
-start_time
-end_time
-availability (bool)
-
-trigger?
-*/
-
+use bcrypt::{hash, DEFAULT_COST};
 use chrono::NaiveDate;
 use rusqlite::{params, Connection, Result};
 use std::env;
-
-use bcrypt::{hash, DEFAULT_COST};
 
 use crate::{
   model::{constant::*, *},
@@ -451,6 +420,43 @@ pub fn is_overlapping_with_unavailable_timeslot(
 
   if is_overlapping {
     log::warn!("Found overlapping unavailable time slot");
+    return Ok(true);
+  }
+
+  Ok(false)
+}
+
+pub fn is_within_unavailable_timeslot(date: NaiveDate, time: u32) -> Result<bool, Status> {
+  log::info!(
+    "Checking if date {} time {} is within unavailable timeslots.",
+    date,
+    time,
+  );
+
+  let conn = handle(connect_to_db(), "Connecting to db")?;
+
+  let mut stmt = handle(
+    conn.prepare(
+      "SELECT EXISTS(
+        SELECT 1 FROM UnavailableTimeSlots
+    WHERE date = ?
+    AND start_time <= ? AND end_time > ?
+      )",
+    ),
+    "Selecting overlaping unavailable time slots",
+  )?;
+
+  let is_within_timeslot: bool = handle(
+    stmt.query_row(params![date, time, time], |row| row.get(0)),
+    "Query mapping",
+  )?;
+
+  if is_within_timeslot {
+    log::warn!(
+      "The date: {} time {} is within an unavailable timeslot",
+      date,
+      time
+    );
     return Ok(true);
   }
 

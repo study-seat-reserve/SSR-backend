@@ -1,4 +1,8 @@
-use crate::{database, model::*, utils::*};
+use crate::{
+  database,
+  model::{constant::NUMBER_OF_SEATS, *},
+  utils::*,
+};
 
 use bcrypt::verify;
 use chrono::NaiveDate;
@@ -46,11 +50,21 @@ pub async fn show_current_seats_status() -> Result<String, Status> {
 
   let date = get_today();
   let now = get_now();
+  let all_seats_status: seat::AllSeatsStatus;
 
-  /*
-    Unavailable
-  */
-  let all_seats_status = database::get_all_seats_status(date, now)?;
+  if database::is_within_unavailable_timeslot(date, now)? {
+    let mut seats_vec = Vec::<seat::SeatStatus>::new();
+    for s in 1..NUMBER_OF_SEATS {
+      seats_vec.push(seat::SeatStatus {
+        seat_id: s,
+        status: seat::Status::Unavailable,
+      })
+    }
+
+    all_seats_status = seat::AllSeatsStatus { seats: seats_vec };
+  } else {
+    all_seats_status = database::get_all_seats_status(date, now)?;
+  }
 
   let json = handle(
     serde_json::to_string(&all_seats_status),
@@ -58,6 +72,15 @@ pub async fn show_current_seats_status() -> Result<String, Status> {
   )?;
 
   log::info!("Show current seats status successfully");
+
+  /*
+  如果now在unavailable timeslot中回傳
+  Unavailable
+  否則若是在Reservations中回傳
+  Borrowed
+  否則是
+  Available
+  */
 
   Ok(json)
 }
@@ -89,7 +112,7 @@ pub async fn show_seats_status_by_time(
   Borrowed
   否則回傳
   Available
-   */
+  */
 
   Ok(json)
 }
@@ -97,7 +120,7 @@ pub async fn show_seats_status_by_time(
 // 查詢當前特定位置預約狀態
 #[get("/api/show_reservations/<date>/<seat_id>")]
 pub async fn show_seat_reservations(date: &str, seat_id: u16) -> Result<String, Status> {
-  log::info!("Show seats: {} reservations", seat_id);
+  log::info!("Show reservations of seat: {}", seat_id);
 
   let date = date_from_string(date)?;
   validate_date(date)?;
@@ -110,7 +133,7 @@ pub async fn show_seat_reservations(date: &str, seat_id: u16) -> Result<String, 
     "Serialize the data as a String of JSON",
   )?;
 
-  log::info!("Show seats: {} reservations successfully", seat_id);
+  log::info!("Show reservations of seat: {} successfully", seat_id);
 
   Ok(json)
 }
