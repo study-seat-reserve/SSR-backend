@@ -317,7 +317,43 @@ pub fn get_seats_status_by_time(
 }
 
 // 查詢特定位置狀態
-pub fn get_specific_seat_status(seat_id: u16) {}
+pub fn get_seat_reservations(date: NaiveDate, seat_id: u16) -> Result<Vec<(u32, u32)>, Status> {
+  log::info!("Getting seat: {} status", seat_id);
+
+  let conn = handle(connect_to_db(), "Connecting to db")?;
+
+  let mut stmt = handle(
+    conn.prepare(
+      "SELECT
+      start_time, end_time
+    FROM 
+      Reservations
+    Where
+      date = ? AND seat_id = ?
+      ",
+    ),
+    "Selecting date, start_time, end_time",
+  )?;
+
+  let timeslots_iter = handle(
+    stmt.query_map(params![date, seat_id], |row| {
+      let start_time: u32 = row.get(0)?;
+      let end_time: u32 = row.get(1)?;
+
+      Ok((start_time, end_time))
+    }),
+    "Query mapping",
+  )?;
+
+  let timeslots: Vec<(u32, u32)> = handle(
+    timeslots_iter.collect(),
+    "Collecting time slots in reservations",
+  )?;
+
+  log::info!("Successfully got seats: {} status", seat_id);
+
+  Ok(timeslots)
+}
 
 // 預約座位
 pub fn reserve_seat(

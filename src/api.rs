@@ -59,6 +59,7 @@ pub async fn show_current_seats_status() -> Result<String, Status> {
   Ok(json)
 }
 
+/////
 // 查詢當前所有位置狀態 + filter
 #[get("/api/show_status/<date>/<start_time>/<end_time>")]
 pub async fn show_seats_status_by_time(
@@ -83,7 +84,23 @@ pub async fn show_seats_status_by_time(
 }
 
 // 查詢當前特定位置預約狀態
-pub async fn show_specific_seat_status(seat_id: u16) {}
+#[get("/api/show_reservations/<date>/<seat_id>")]
+pub async fn show_seat_reservations(date: &str, seat_id: u16) -> Result<String, Status> {
+  log::info!("Show seats: {} reservations", seat_id);
+
+  let date = date_from_string(date)?;
+
+  let timeslots = database::get_seat_reservations(date, seat_id)?;
+
+  let json = handle(
+    serde_json::to_string(&timeslots),
+    "Serialize the data as a String of JSON",
+  )?;
+
+  log::info!("Show seats: {} reservations successfully", seat_id);
+
+  Ok(json)
+}
 
 // 預約座位
 #[post("/api/reserve", format = "json", data = "<reservation>")]
