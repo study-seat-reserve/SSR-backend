@@ -336,8 +336,28 @@ pub fn reserve_seat(
 
   let mut conn = handle(connect_to_db(), "Connecting to db")?;
   let tx = handle(conn.transaction(), "Starting new transaction")?;
+  let is_overlapping: bool;
 
-  if is_overlapping_with_other_reservation(&tx, seat_id, date, start_time, end_time)? {
+  {
+    let mut stmt = handle(
+      tx.prepare(
+        "SELECT EXISTS(
+        SELECT 1 FROM Reservations
+        WHERE date = ?
+        AND  (MAX(?, start_time) < MIN(?, end_time))
+      )",
+      ),
+      "Selecting overlaping reservations",
+    )?;
+
+    is_overlapping = handle(
+      stmt.query_row(params![date, start_time, end_time], |row| row.get(0)),
+      "Query mapping",
+    )?;
+  }
+
+  if is_overlapping {
+    log::warn!("Found overlapping reservation");
     handle(tx.rollback(), "Rolling back")?;
     return Err(Status::Conflict);
   }
