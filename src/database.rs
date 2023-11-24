@@ -1,6 +1,6 @@
 use bcrypt::{hash, DEFAULT_COST};
 use chrono::NaiveDate;
-use rusqlite::{params, Connection, Result};
+use rusqlite::{params, Connection, Result, Transaction};
 use std::env;
 
 use crate::{
@@ -334,21 +334,68 @@ pub fn reserve_seat(
 ) -> Result<(), Status> {
   log::info!("Reserving a seat for user_id: {}", user_id);
 
-  let conn = handle(connect_to_db(), "Connecting to db")?;
+  let mut conn = handle(connect_to_db(), "Connecting to db")?;
+  let tx = handle(conn.transaction(), "Starting new transaction")?;
+
+  if is_overlapping_with_other_reservation(&tx, seat_id, date, start_time, end_time)? {
+    handle(tx.rollback(), "Rolling back")?;
+    return Err(Status::Conflict);
+  }
+
+  if is_overlapping_with_unavailable_timeslot(&tx, date, start_time, end_time)? {
+    handle(tx.rollback(), "Rolling back")?;
+    return Err(Status::Conflict);
+  };
 
   handle(
-    conn.execute(
+    tx.execute(
       "INSERT INTO Reservations (user_id, seat_id, date, start_time, end_time) VALUES (?1, ?2, ?3, ?4, ?5)",
       params![user_id, seat_id, date, start_time, end_time],
     ),
     "Inserting new Reservation information",
   )?;
 
+  handle(tx.commit(), "Commiting transcation")?;
+
   log::info!("Successfully reserved a seat for user_id: {}", user_id);
   Ok(())
 }
 
-pub fn is_overlapping_with_other_reservation(
+// pub fn update_reservation_time(
+//   user_id: &str,
+//   new_date: NaiveDate,
+//   new_start_time: u32,
+//   new_end_time: u32,
+// ) -> Result<(), Status> {
+//   // 開始一個新的事務
+//   let tx = conn.transaction()?;
+
+//   // 檢查更新條件（如是否與其他預約重疊）
+//   // 這裡可以加入額外的檢查邏輯
+//   // ...
+
+//   // 執行更新操作
+//   let affected_rows = tx.execute(
+//     "UPDATE reservations SET date = ?1, start_time = ?2, end_time = ?3 WHERE user_id = ?4",
+//     &[new_date, new_start_time, new_end_time, user_id],
+//   )?;
+
+//   // 確認是否有行被更新
+//   if affected_rows == 0 {
+//     // 如果沒有行被更新，可能是因為找不到對應的預約
+//     // 可以選擇回滾事務
+//     tx.rollback()?;
+//     // 返回錯誤或特定的狀態
+//   } else {
+//     // 提交事務
+//     tx.commit()?;
+//   }
+
+//   Ok(())
+// }
+
+fn is_overlapping_with_other_reservation(
+  tx: &Transaction,
   seat_id: u16,
   date: NaiveDate,
   start_time: u32,
@@ -362,10 +409,8 @@ pub fn is_overlapping_with_other_reservation(
     end_time
   );
 
-  let conn = handle(connect_to_db(), "Connecting to db")?;
-
   let mut stmt = handle(
-    conn.prepare(
+    tx.prepare(
       "SELECT EXISTS(
         SELECT 1 FROM Reservations
         WHERE date = ?
@@ -388,7 +433,8 @@ pub fn is_overlapping_with_other_reservation(
   Ok(false)
 }
 
-pub fn is_overlapping_with_unavailable_timeslot(
+fn is_overlapping_with_unavailable_timeslot(
+  tx: &Transaction,
   date: NaiveDate,
   start_time: u32,
   end_time: u32,
@@ -400,10 +446,8 @@ pub fn is_overlapping_with_unavailable_timeslot(
     end_time
   );
 
-  let conn = handle(connect_to_db(), "Connecting to db")?;
-
   let mut stmt = handle(
-    conn.prepare(
+    tx.prepare(
       "SELECT EXISTS(
         SELECT 1 FROM UnavailableTimeSlots
     WHERE date = ?

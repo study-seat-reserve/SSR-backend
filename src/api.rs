@@ -1,6 +1,6 @@
 use crate::{
   database,
-  model::{constant::NUMBER_OF_SEATS, *},
+  model::{constant::*, *},
   utils::*,
 };
 
@@ -85,7 +85,6 @@ pub async fn show_current_seats_status() -> Result<String, Status> {
   Ok(json)
 }
 
-/////
 // 查詢當前所有位置狀態 + filter
 #[get("/api/show_status/<date>/<start_time>/<end_time>")]
 pub async fn show_seats_status_by_time(
@@ -152,13 +151,6 @@ pub async fn reserve_seat(reservation: Json<reservation::Reservation>) -> Result
 
   log::info!("Reserving a seat :{} for user: {}", seat_id, user_id);
 
-  if database::is_overlapping_with_other_reservation(seat_id, date, start_time, end_time)? {
-    return Err(Status::Conflict);
-  };
-  if database::is_overlapping_with_unavailable_timeslot(date, start_time, end_time)? {
-    return Err(Status::Conflict);
-  };
-
   database::reserve_seat(&user_id, seat_id, date, start_time, end_time)?;
 
   log::info!(
@@ -171,10 +163,32 @@ pub async fn reserve_seat(reservation: Json<reservation::Reservation>) -> Result
 }
 
 // 修改預約時段
-pub async fn modify_reservation_time() {
-  // return status
-}
+#[post(
+  "/api/update_reservation",
+  format = "json",
+  data = "<update_reservation>"
+)]
+pub async fn update_reservation(
+  update_reservation: Json<reservation::UpdateReservation>,
+) -> Result<(), Status> {
+  handle_validator(update_reservation.validate())?;
+  let update_data: reservation::UpdateReservation = update_reservation.into_inner();
 
+  let user_id = update_data.user_id;
+  let new_date = update_data.date;
+  let new_start_time = update_data.new_start_time;
+  let new_end_time = update_data.new_end_time;
+
+  log::info!("Updating reservation for user: {}", user_id);
+
+  // 這裡需要實作檢查和更新邏輯
+  // 例如：檢查新的時段是否與現有預約重疊，是否有空位等等
+  // ...
+
+  log::info!("Reservation for user: {} updated successfully", user_id);
+
+  Ok(())
+}
 // 刪除預約時段
 pub async fn delete_reservation_time() {
   // return status

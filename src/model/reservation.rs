@@ -16,6 +16,16 @@ pub struct Reservation {
   pub end_time: u32,
 }
 
+#[derive(Debug, Deserialize, Serialize, Validate)]
+#[validate(schema(function = "validate_update_reservation", skip_on_field_errors = false))]
+pub struct UpdateReservation {
+  pub user_id: String,
+  #[validate(custom = "validate_date")]
+  pub date: NaiveDate,
+  pub new_start_time: u32,
+  pub new_end_time: u32,
+}
+
 fn validate_seat_id(seat_id: u16) -> Result<(), ValidationError> {
   if seat_id < 1 || seat_id > NUMBER_OF_SEATS {
     return Err(ValidationError::new("Seat id out of range"));
@@ -35,11 +45,15 @@ fn validate_date(date: &NaiveDate) -> Result<(), ValidationError> {
   Ok(())
 }
 
-fn validate_reservation(reservation: &Reservation) -> Result<(), ValidationError> {
+fn validate_datetime(
+  date: NaiveDate,
+  start_time: u32,
+  end_time: u32,
+) -> Result<(), ValidationError> {
   let today = get_today();
-  let date: NaiveDate = reservation.date;
-  let start_time: u32 = reservation.start_time;
-  let end_time: u32 = reservation.end_time;
+  let date: NaiveDate = date;
+  let start_time: u32 = start_time;
+  let end_time: u32 = end_time;
   let now = get_now();
 
   if date == today && start_time < now {
@@ -55,4 +69,22 @@ fn validate_reservation(reservation: &Reservation) -> Result<(), ValidationError
   }
 
   Ok(())
+}
+
+fn validate_update_reservation(
+  update_reservation: &UpdateReservation,
+) -> Result<(), ValidationError> {
+  let date: NaiveDate = update_reservation.date;
+  let start_time: u32 = update_reservation.new_start_time;
+  let end_time: u32 = update_reservation.new_end_time;
+
+  validate_datetime(date, start_time, end_time)
+}
+
+fn validate_reservation(reservation: &Reservation) -> Result<(), ValidationError> {
+  let date: NaiveDate = reservation.date;
+  let start_time: u32 = reservation.start_time;
+  let end_time: u32 = reservation.end_time;
+
+  validate_datetime(date, start_time, end_time)
 }
