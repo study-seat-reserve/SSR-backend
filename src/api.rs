@@ -175,15 +175,13 @@ pub async fn update_reservation(
   let update_data: reservation::UpdateReservation = update_reservation.into_inner();
 
   let user_id = update_data.user_id;
-  let new_date = update_data.date;
+  let date = update_data.date;
   let new_start_time = update_data.new_start_time;
   let new_end_time = update_data.new_end_time;
 
   log::info!("Updating reservation for user: {}", user_id);
 
-  // 這裡需要實作檢查和更新邏輯
-  // 例如：檢查新的時段是否與現有預約重疊，是否有空位等等
-  // ...
+  database::update_reservation_time(&user_id, date, new_start_time, new_end_time)?;
 
   log::info!("Reservation for user: {} updated successfully", user_id);
 

@@ -78,7 +78,8 @@ async fn main() {
     show_current_seats_status,
     reserve_seat,
     show_seats_status_by_time,
-    show_seat_reservations
+    show_seat_reservations,
+    update_reservation
   ];
   let server = rocket::build()
     .register("/", catchers)

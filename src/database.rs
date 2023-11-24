@@ -361,38 +361,68 @@ pub fn reserve_seat(
   Ok(())
 }
 
-// pub fn update_reservation_time(
-//   user_id: &str,
-//   new_date: NaiveDate,
-//   new_start_time: u32,
-//   new_end_time: u32,
-// ) -> Result<(), Status> {
-//   // 開始一個新的事務
-//   let tx = conn.transaction()?;
+pub fn update_reservation_time(
+  user_id: &str,
+  date: NaiveDate,
+  new_start_time: u32,
+  new_end_time: u32,
+) -> Result<(), Status> {
+  let mut conn = handle(connect_to_db(), "Connecting to db")?;
+  let tx = handle(conn.transaction(), "Starting new transaction")?;
+  let is_overlapping: bool;
 
-//   // 檢查更新條件（如是否與其他預約重疊）
-//   // 這裡可以加入額外的檢查邏輯
-//   // ...
+  {
+    let mut stmt = handle(
+      tx.prepare(
+        "SELECT EXISTS(
+            SELECT 1 FROM Reservations
+            WHERE user_id != ?
+            AND date = ?
+            AND  (MAX(?, start_time) < MIN(?, end_time))
+        )",
+      ),
+      "Preparing to check for overlapping reservations",
+    )?;
 
-//   // 執行更新操作
-//   let affected_rows = tx.execute(
-//     "UPDATE reservations SET date = ?1, start_time = ?2, end_time = ?3 WHERE user_id = ?4",
-//     &[new_date, new_start_time, new_end_time, user_id],
-//   )?;
+    is_overlapping = handle(
+      stmt.query_row(
+        params![user_id, date, new_start_time, new_end_time],
+        |row| row.get(0),
+      ),
+      "Query mapping",
+    )?;
+  }
 
-//   // 確認是否有行被更新
-//   if affected_rows == 0 {
-//     // 如果沒有行被更新，可能是因為找不到對應的預約
-//     // 可以選擇回滾事務
-//     tx.rollback()?;
-//     // 返回錯誤或特定的狀態
-//   } else {
-//     // 提交事務
-//     tx.commit()?;
-//   }
+  if is_overlapping {
+    log::warn!(
+      "No reservations found for user_id: {} on date: {}.",
+      user_id,
+      date
+    );
 
-//   Ok(())
-// }
+    handle(tx.rollback(), "Rolling back")?;
+    return Err(Status::Conflict);
+  }
+
+  let affected_rows = handle(
+    tx.execute(
+      "UPDATE Reservations SET start_time = ?, end_time = ? WHERE user_id = ? AND date = ?",
+      params![new_start_time, new_end_time, user_id, date],
+    ),
+    "",
+  )?;
+
+  if affected_rows == 0 {
+    log::warn!("Found overlapping reservation");
+
+    handle(tx.rollback(), "Rolling back")?;
+    return Err(Status::NotFound);
+  } else {
+    handle(tx.commit(), "Commiting transcation")?;
+  }
+
+  Ok(())
+}
 
 fn is_overlapping_with_other_reservation(
   tx: &Transaction,
