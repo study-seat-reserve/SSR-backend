@@ -1,6 +1,6 @@
 use bcrypt::{hash, DEFAULT_COST};
 use chrono::NaiveDate;
-use rusqlite::{params, Connection, Result, Transaction};
+use rusqlite::{params, Connection, Result};
 use std::env;
 
 use crate::{
@@ -438,6 +438,35 @@ pub fn delete_reservation_time(user_id: &str, date: NaiveDate) -> Result<(), Sta
   }
 
   Ok(())
+}
+
+pub fn get_user_reservations(user_id: &str) -> Result<Vec<reservation::Reservation>, Status> {
+  let conn = handle(connect_to_db(), "Connecting to db")?;
+
+  let date = get_today();
+
+  let mut stmt = handle(
+    conn
+    .prepare("SELECT seat_id, date, start_time, end_time FROM Reservations WHERE user_id = ?1 AND date >= ?")
+    ,"Selecting reservations")?;
+
+  let reservations_iter = handle(
+    stmt.query_map(params![user_id, date], |row| {
+      Ok(reservation::Reservation {
+        user_id: user_id.to_owned(),
+        seat_id: row.get(0)?,
+        date: row.get(1)?,
+        start_time: row.get(2)?,
+        end_time: row.get(3)?,
+      })
+    }),
+    "Query mapping",
+  )?;
+
+  let reservations: Vec<reservation::Reservation> =
+    handle(reservations_iter.collect(), "Collecting reservations")?;
+
+  Ok(reservations)
 }
 
 pub fn is_overlapping_with_unavailable_timeslot(

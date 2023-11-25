@@ -81,6 +81,7 @@ async fn main() {
     show_seat_reservations,
     update_reservation,
     delete_reservation_time,
+    list_user_reservations,
   ];
   let server = rocket::build()
     .register("/", catchers)

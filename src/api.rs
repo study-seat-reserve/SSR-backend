@@ -217,6 +217,14 @@ pub async fn delete_reservation_time(
 }
 
 // 顯示使用者預約時段
-pub async fn get_user_reservation_times() {
-  // return time
+#[get("/api/user_reservations/<user_id>")]
+pub async fn list_user_reservations(
+  user_id: String,
+) -> Result<Json<Vec<reservation::Reservation>>, Status> {
+  log::info!("List user reservations");
+
+  let reservations = database::get_user_reservations(&user_id)?;
+
+  log::info!("List user reservations successfully");
+  Ok(Json(reservations))
 }
