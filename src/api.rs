@@ -151,6 +151,10 @@ pub async fn reserve_seat(reservation: Json<reservation::Reservation>) -> Result
 
   log::info!("Reserving a seat :{} for user: {}", seat_id, user_id);
 
+  if database::is_overlapping_with_unavailable_timeslot(date, start_time, end_time)? {
+    return Err(Status::Conflict);
+  }
+
   database::reserve_seat(&user_id, seat_id, date, start_time, end_time)?;
 
   log::info!(
@@ -210,7 +214,6 @@ pub async fn delete_reservation_time(
   log::info!("Reservation for user: {} deleted successfully", user_id);
 
   Ok(())
-  // return status
 }
 
 // 顯示使用者預約時段

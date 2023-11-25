@@ -9,7 +9,7 @@ use crate::{
 };
 
 fn connect_to_db() -> Result<Connection> {
-  log::info!("Connecting to db");
+  log::debug!("Connecting to db");
 
   let root = env::var("ROOT").expect("Failed to get root path");
   let path = format!("{}/SSR.db3", root);
@@ -177,8 +177,6 @@ pub fn login() {}
 
 // 查詢所有位置在特定時間點狀態
 pub fn get_all_seats_status(date: NaiveDate, time: u32) -> Result<seat::AllSeatsStatus, Status> {
-  log::info!("Getting current seats status");
-
   let conn = handle(connect_to_db(), "Connecting to db")?;
 
   let mut stmt = handle(
@@ -224,8 +222,6 @@ pub fn get_all_seats_status(date: NaiveDate, time: u32) -> Result<seat::AllSeats
 
   let all_seats_status = seat::AllSeatsStatus { seats: seats_vec };
 
-  log::info!("Successfully got current seats status");
-
   Ok(all_seats_status)
 }
 
@@ -234,8 +230,6 @@ pub fn get_seats_status_by_time(
   start_time: u32,
   end_time: u32,
 ) -> Result<seat::AllSeatsStatus, Status> {
-  log::info!("Getting seats status by time");
-
   let conn = handle(connect_to_db(), "Connecting to db")?;
 
   let mut stmt = handle(
@@ -280,15 +274,11 @@ pub fn get_seats_status_by_time(
 
   let all_seats_status = seat::AllSeatsStatus { seats: seats_vec };
 
-  log::info!("Successfully got seats status by time");
-
   Ok(all_seats_status)
 }
 
 // 查詢特定位置狀態
 pub fn get_seat_reservations(date: NaiveDate, seat_id: u16) -> Result<Vec<(u32, u32)>, Status> {
-  log::info!("Getting seat: {} status", seat_id);
-
   let conn = handle(connect_to_db(), "Connecting to db")?;
 
   let mut stmt = handle(
@@ -319,8 +309,6 @@ pub fn get_seat_reservations(date: NaiveDate, seat_id: u16) -> Result<Vec<(u32, 
     "Collecting time slots in reservations",
   )?;
 
-  log::info!("Successfully got seats: {} status", seat_id);
-
   Ok(timeslots)
 }
 
@@ -332,8 +320,6 @@ pub fn reserve_seat(
   start_time: u32,
   end_time: u32,
 ) -> Result<(), Status> {
-  log::info!("Reserving a seat for user_id: {}", user_id);
-
   let mut conn = handle(connect_to_db(), "Connecting to db")?;
   let tx = handle(conn.transaction(), "Starting new transaction")?;
   let is_overlapping: bool;
@@ -363,11 +349,6 @@ pub fn reserve_seat(
     return Err(Status::Conflict);
   }
 
-  if is_overlapping_with_unavailable_timeslot(&tx, date, start_time, end_time)? {
-    handle(tx.rollback(), "Rolling back")?;
-    return Err(Status::Conflict);
-  };
-
   handle(
     tx.execute(
       "INSERT INTO Reservations (user_id, seat_id, date, start_time, end_time) VALUES (?1, ?2, ?3, ?4, ?5)",
@@ -378,7 +359,6 @@ pub fn reserve_seat(
 
   handle(tx.commit(), "Commiting transcation")?;
 
-  log::info!("Successfully reserved a seat for user_id: {}", user_id);
   Ok(())
 }
 
@@ -460,47 +440,7 @@ pub fn delete_reservation_time(user_id: &str, date: NaiveDate) -> Result<(), Sta
   Ok(())
 }
 
-fn is_overlapping_with_other_reservation(
-  tx: &Transaction,
-  seat_id: u16,
-  date: NaiveDate,
-  start_time: u32,
-  end_time: u32,
-) -> Result<bool, Status> {
-  log::info!(
-    "Checking for overlapping reservations for seat_id: {}, date: {}, start_time: {}, end_time: {}",
-    seat_id,
-    date,
-    start_time,
-    end_time
-  );
-
-  let mut stmt = handle(
-    tx.prepare(
-      "SELECT EXISTS(
-        SELECT 1 FROM Reservations
-        WHERE date = ?
-        AND  (MAX(?, start_time) < MIN(?, end_time))
-      )",
-    ),
-    "Selecting overlaping reservations",
-  )?;
-
-  let is_overlapping: bool = handle(
-    stmt.query_row(params![date, start_time, end_time], |row| row.get(0)),
-    "Query mapping",
-  )?;
-
-  if is_overlapping {
-    log::warn!("Found overlapping reservation");
-    return Ok(true);
-  }
-
-  Ok(false)
-}
-
 pub fn is_overlapping_with_unavailable_timeslot(
-  tx: &Transaction,
   date: NaiveDate,
   start_time: u32,
   end_time: u32,
@@ -511,9 +451,10 @@ pub fn is_overlapping_with_unavailable_timeslot(
     start_time,
     end_time
   );
+  let conn = handle(connect_to_db(), "Connecting to db")?;
 
   let mut stmt = handle(
-    tx.prepare(
+    conn.prepare(
       "SELECT EXISTS(
         SELECT 1 FROM UnavailableTimeSlots
     WHERE date = ?
@@ -530,6 +471,7 @@ pub fn is_overlapping_with_unavailable_timeslot(
 
   if is_overlapping {
     log::warn!("Found overlapping unavailable time slot");
+
     return Ok(true);
   }
 
@@ -537,12 +479,6 @@ pub fn is_overlapping_with_unavailable_timeslot(
 }
 
 pub fn is_within_unavailable_timeslot(date: NaiveDate, time: u32) -> Result<bool, Status> {
-  log::info!(
-    "Checking if date {} time {} is within unavailable timeslots.",
-    date,
-    time,
-  );
-
   let conn = handle(connect_to_db(), "Connecting to db")?;
 
   let mut stmt = handle(
