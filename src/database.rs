@@ -3,10 +3,7 @@ use chrono::NaiveDate;
 use rusqlite::{params, Connection, Result};
 use std::env;
 
-use crate::{
-  model::{constant::*, *},
-  utils::*,
-};
+use crate::{model::*, utils::*};
 
 fn connect_to_db() -> Result<Connection> {
   log::debug!("Connecting to db");
@@ -33,15 +30,16 @@ pub fn init_db() {
 
   conn
     .execute(
-      "CREATE TABLE IF NOT EXISTS Seat (
+      "CREATE TABLE IF NOT EXISTS Seats (
          seat_id INTEGER PRIMARY KEY,
+         available BOOLEAN NOT NULL,
          other_info TEXT
      )",
       [],
     )
     .unwrap_or_else(|e| {
-      log::error!("Failed to create Seat table: {}", e);
-      panic!("Failed to create Seat table");
+      log::error!("Failed to create Seats table: {}", e);
+      panic!("Failed to create Seats table");
     });
 
   init_seat_info(&conn);
@@ -73,7 +71,7 @@ pub fn init_db() {
          end_time INTEGER NOT NULL,
          PRIMARY KEY (user_id, Date),
          FOREIGN KEY(user_id) REFERENCES Users(user_id),
-         FOREIGN KEY(seat_id) REFERENCES Seat(seat_id)
+         FOREIGN KEY(seat_id) REFERENCES Seats(seat_id)
      )",
       [],
     )
@@ -102,24 +100,29 @@ pub fn init_db() {
 
 fn init_seat_info(conn: &Connection) {
   let count: u16 = conn
-    .query_row("SELECT COUNT(*) FROM Seat", [], |row| row.get(0))
+    .query_row("SELECT COUNT(*) FROM Seats", [], |row| row.get(0))
     .unwrap_or_else(|e| {
       log::error!("Failed to create TimeSlots table: {}", e);
-      panic!("Failed to create TimeSlots table");
+      panic!("Failed to create TimeSlots table: {}", e);
     });
 
-  if count != constant::NUMBER_OF_SEATS {
-    for i in 1..=constant::NUMBER_OF_SEATS {
+  if count < constant::NUMBER_OF_SEATS {
+    log::info!("Initializing Seats table");
+
+    for i in (count + 1)..=constant::NUMBER_OF_SEATS {
       conn
         .execute(
-          "INSERT INTO Seat (seat_id, other_info) VALUES (?1, ?2)",
-          params![i, ""],
+          "INSERT INTO Seats (seat_id, available, other_info) VALUES (?1, ?2, ?3)",
+          params![i, true, ""],
         )
         .unwrap_or_else(|e| {
-          log::error!("Failed to init Seat table: {}", e);
-          panic!("Failed to init Seat table");
+          log::error!("Failed to initialize Seats table: {}", e);
+          panic!("Failed to initialize Seats table: {}", e);
         });
     }
+  } else {
+    log::error!("Failed to initialize Seats table: number of seat in table > NUMBER_OF_SEATS");
+    panic!("Failed to initialize Seats table: number of seat in table > NUMBER_OF_SEATS");
   }
 }
 
@@ -182,15 +185,16 @@ pub fn get_all_seats_status(date: NaiveDate, time: u32) -> Result<seat::AllSeats
   let mut stmt = handle(
     conn.prepare(
       "SELECT 
-      Seat.seat_id,
+      Seats.seat_id,
       CASE
+        WHEN Seats.available = 0 THEN 'Unavailable'
         WHEN Reservations.seat_id IS NULL THEN 'Available'
         ELSE 'Borrowed'
       END as ReservationStatus
     FROM 
-      Seat
+      Seats
     LEFT JOIN Reservations ON 
-      Seat.seat_id = Reservations.seat_id AND
+      Seats.seat_id = Reservations.seat_id AND
       Reservations.date = ? AND
       Reservations.start_time <= ? AND
       Reservations.end_time > ?
@@ -206,6 +210,7 @@ pub fn get_all_seats_status(date: NaiveDate, time: u32) -> Result<seat::AllSeats
       let status = match status_str.as_str() {
         "Available" => seat::Status::Available,
         "Borrowed" => seat::Status::Borrowed,
+        "Unavailable" => seat::Status::Unavailable,
         _ => return Err(rusqlite::Error::InvalidQuery),
       };
 
@@ -235,15 +240,16 @@ pub fn get_seats_status_by_time(
   let mut stmt = handle(
     conn.prepare(
       "SELECT DISTINCT 
-      Seat.seat_id,
+      Seats.seat_id,
       CASE
+        WHEN Seats.available = 0 THEN 'Unavailable'
         WHEN Reservations.seat_id IS NULL THEN 'Available'
         ELSE 'Borrowed'
       END as ReservationStatus
     FROM 
-      Seat
+      Seats
     LEFT JOIN Reservations ON 
-      Seat.seat_id = Reservations.seat_id AND
+      Seats.seat_id = Reservations.seat_id AND
       Reservations.date = ? AND
       (MAX(?, start_time) < MIN(?, end_time))
       ",
@@ -258,6 +264,7 @@ pub fn get_seats_status_by_time(
       let status = match status_str.as_str() {
         "Available" => seat::Status::Available,
         "Borrowed" => seat::Status::Borrowed,
+        "Unavailable" => seat::Status::Unavailable,
         _ => return Err(rusqlite::Error::InvalidQuery),
       };
 
@@ -498,13 +505,7 @@ pub fn is_overlapping_with_unavailable_timeslot(
     "Query mapping",
   )?;
 
-  if is_overlapping {
-    log::warn!("Found overlapping unavailable time slot");
-
-    return Ok(true);
-  }
-
-  Ok(false)
+  Ok(is_overlapping)
 }
 
 pub fn is_within_unavailable_timeslot(date: NaiveDate, time: u32) -> Result<bool, Status> {
@@ -526,14 +527,20 @@ pub fn is_within_unavailable_timeslot(date: NaiveDate, time: u32) -> Result<bool
     "Query mapping",
   )?;
 
-  if is_within_timeslot {
-    log::warn!(
-      "The date: {} time {} is within an unavailable timeslot",
-      date,
-      time
-    );
-    return Ok(true);
-  }
+  Ok(is_within_timeslot)
+}
 
-  Ok(false)
+pub fn is_seat_available(seat_id: u16) -> Result<bool, Status> {
+  let conn = handle(connect_to_db(), "Connecting to db")?;
+
+  let available = handle(
+    conn.query_row(
+      "SELECT available FROM Seats WHERE seat_id = ?1",
+      params![seat_id],
+      |row| row.get(0),
+    ),
+    "Selecting available from Seats",
+  )?;
+
+  Ok(available)
 }

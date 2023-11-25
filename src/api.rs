@@ -53,6 +53,11 @@ pub async fn show_current_seats_status() -> Result<String, Status> {
   let all_seats_status: seat::AllSeatsStatus;
 
   if database::is_within_unavailable_timeslot(date, now)? {
+    log::warn!(
+      "The date: {} time: {} is within an unavailable timeslot",
+      date,
+      now
+    );
     let mut seats_vec = Vec::<seat::SeatStatus>::new();
     for s in 1..NUMBER_OF_SEATS {
       seats_vec.push(seat::SeatStatus {
@@ -151,7 +156,18 @@ pub async fn reserve_seat(reservation: Json<reservation::Reservation>) -> Result
 
   log::info!("Reserving a seat :{} for user: {}", seat_id, user_id);
 
+  if !database::is_seat_available(seat_id)? {
+    log::warn!("The seat: {} is unavailable", seat_id);
+    return Err(Status::UnprocessableEntity);
+  }
+
   if database::is_overlapping_with_unavailable_timeslot(date, start_time, end_time)? {
+    log::warn!(
+      "The date: {} start_time: {} end_time: {} is overlapping unavailable time slot",
+      date,
+      start_time,
+      end_time
+    );
     return Err(Status::Conflict);
   }
 
@@ -184,6 +200,10 @@ pub async fn update_reservation(
   let new_end_time = update_data.new_end_time;
 
   log::info!("Updating reservation for user: {}", user_id);
+
+  if database::is_overlapping_with_unavailable_timeslot(date, new_start_time, new_end_time)? {
+    return Err(Status::Conflict);
+  }
 
   database::update_reservation_time(&user_id, date, new_start_time, new_end_time)?;
 

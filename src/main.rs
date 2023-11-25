@@ -62,10 +62,10 @@ fn handle_service_unavailable(_: &Request) -> &'static str {
 #[tokio::main]
 async fn main() {
   dotenv().ok();
+  logger::init_logger(log::LevelFilter::Info);
 
   database::init_db();
 
-  logger::init_logger(log::LevelFilter::Info);
   let catchers = catchers![
     handle_unprocessable_entity,
     handle_forbidden,

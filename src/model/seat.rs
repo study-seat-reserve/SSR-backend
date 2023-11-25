@@ -6,6 +6,7 @@ use std::string::ToString;
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Seat {
   pub seat_id: u16,
+  pub available: bool,
   pub other_info: Option<String>,
 }
 
