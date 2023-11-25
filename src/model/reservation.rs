@@ -26,6 +26,13 @@ pub struct UpdateReservation {
   pub new_end_time: u32,
 }
 
+#[derive(Debug, Deserialize, Serialize, Validate)]
+pub struct DeleteReservation {
+  pub user_id: String,
+  #[validate(custom = "validate_date")]
+  pub date: NaiveDate,
+}
+
 fn validate_seat_id(seat_id: u16) -> Result<(), ValidationError> {
   if seat_id < 1 || seat_id > NUMBER_OF_SEATS {
     return Err(ValidationError::new("Seat id out of range"));

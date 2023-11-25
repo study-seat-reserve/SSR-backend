@@ -358,6 +358,7 @@ pub fn reserve_seat(
 
   if is_overlapping {
     log::warn!("Found overlapping reservation");
+
     handle(tx.rollback(), "Rolling back")?;
     return Err(Status::Conflict);
   }
@@ -414,11 +415,7 @@ pub fn update_reservation_time(
   }
 
   if is_overlapping {
-    log::warn!(
-      "No reservations found for user_id: {} on date: {}.",
-      user_id,
-      date
-    );
+    log::warn!("Found overlapping reservation");
 
     handle(tx.rollback(), "Rolling back")?;
     return Err(Status::Conflict);
@@ -429,16 +426,35 @@ pub fn update_reservation_time(
       "UPDATE Reservations SET start_time = ?, end_time = ? WHERE user_id = ? AND date = ?",
       params![new_start_time, new_end_time, user_id, date],
     ),
-    "",
+    "Updating reservation",
   )?;
 
   if affected_rows == 0 {
-    log::warn!("Found overlapping reservation");
+    log::warn!("No reservation found for updation");
 
     handle(tx.rollback(), "Rolling back")?;
     return Err(Status::NotFound);
   } else {
     handle(tx.commit(), "Commiting transcation")?;
+  }
+
+  Ok(())
+}
+
+pub fn delete_reservation_time(user_id: &str, date: NaiveDate) -> Result<(), Status> {
+  let conn = handle(connect_to_db(), "Connecting to db")?;
+
+  let affected_rows = handle(
+    conn.execute(
+      "DELETE FROM Reservations WHERE user_id = ?1 AND date = ?2",
+      params![user_id, date],
+    ),
+    "Deleting reservation",
+  )?;
+
+  if affected_rows == 0 {
+    log::warn!("No reservation found for deletion");
+    return Err(Status::NotFound);
   }
 
   Ok(())
@@ -483,7 +499,7 @@ fn is_overlapping_with_other_reservation(
   Ok(false)
 }
 
-fn is_overlapping_with_unavailable_timeslot(
+pub fn is_overlapping_with_unavailable_timeslot(
   tx: &Transaction,
   date: NaiveDate,
   start_time: u32,

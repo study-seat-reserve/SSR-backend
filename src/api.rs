@@ -187,8 +187,29 @@ pub async fn update_reservation(
 
   Ok(())
 }
+
 // 刪除預約時段
-pub async fn delete_reservation_time() {
+#[post(
+  "/api/delete_reservation",
+  format = "json",
+  data = "<delete_reservation>"
+)]
+pub async fn delete_reservation_time(
+  delete_reservation: Json<reservation::DeleteReservation>,
+) -> Result<(), Status> {
+  handle_validator(delete_reservation.validate())?;
+  let update_data: reservation::DeleteReservation = delete_reservation.into_inner();
+
+  let user_id = update_data.user_id;
+  let date = update_data.date;
+
+  log::info!("Deleting reservation for user: {}", user_id);
+
+  database::delete_reservation_time(&user_id, date)?;
+
+  log::info!("Reservation for user: {} deleted successfully", user_id);
+
+  Ok(())
   // return status
 }
 
