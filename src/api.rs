@@ -258,3 +258,10 @@ pub async fn list_user_reservations(
   log::info!("List user reservations successfully");
   Ok(Json(reservations))
 }
+
+/*
+管理者設定unavaliable time slot
+管理者設定座位avaliable
+黑名單
+使用者改名
+*/
