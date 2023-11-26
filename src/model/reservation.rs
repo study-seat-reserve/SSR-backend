@@ -7,7 +7,6 @@ use validator::{Validate, ValidationError};
 #[derive(Debug, Deserialize, Serialize, Validate)]
 #[validate(schema(function = "validate_reservation", skip_on_field_errors = false))]
 pub struct Reservation {
-  pub user_id: String,
   #[validate(custom = "validate_seat_id")]
   pub seat_id: u16,
   #[validate(custom = "validate_date")]
@@ -19,7 +18,6 @@ pub struct Reservation {
 #[derive(Debug, Deserialize, Serialize, Validate)]
 #[validate(schema(function = "validate_update_reservation", skip_on_field_errors = false))]
 pub struct UpdateReservation {
-  pub user_id: String,
   #[validate(custom = "validate_date")]
   pub date: NaiveDate,
   pub new_start_time: u32,
@@ -28,7 +26,6 @@ pub struct UpdateReservation {
 
 #[derive(Debug, Deserialize, Serialize, Validate)]
 pub struct DeleteReservation {
-  pub user_id: String,
   #[validate(custom = "validate_date")]
   pub date: NaiveDate,
 }

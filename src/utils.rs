@@ -1,5 +1,6 @@
-use crate::model::constant::*;
-use chrono::{Duration, Local, NaiveDate, NaiveDateTime, NaiveTime, Timelike};
+use crate::model::{constant::*, *};
+use chrono::{Duration, Local, NaiveDate, NaiveDateTime, NaiveTime, Timelike, Utc};
+use jsonwebtoken::{decode, encode, Algorithm, DecodingKey, EncodingKey, Header, Validation};
 use lettre::{
   message::Mailbox, transport::smtp::authentication::Credentials, Message, SmtpTransport, Transport,
 };
@@ -196,4 +197,41 @@ pub fn send_verification_email(email: &str, url: &str) -> Result<(), Status> {
   handle(mailer.send(&email), "Sending email")?;
 
   Ok(())
+}
+
+pub fn create_token(userinfo: user::UserInfo) -> Result<String, Status> {
+  let expiration = Utc::now()
+    .checked_add_signed(Duration::hours(1)) // 1 小時後過期
+    .expect("valid timestamp")
+    .timestamp() as usize;
+
+  let claims = token::Claims {
+    user: userinfo.user_name,
+    role: userinfo.user_role,
+    exp: expiration,
+  };
+
+  let header = Header::new(Algorithm::HS256);
+  let key = env::var("SECRET_KEY").expect("Failed to get secret key");
+
+  let encoding_key = EncodingKey::from_secret(key.as_ref());
+
+  let token = handle(encode(&header, &claims, &encoding_key), "Encoding JWT")?;
+
+  Ok(token)
+}
+
+pub fn verify_jwt(token: &str) -> Result<token::Claims, Status> {
+  let key = env::var("SECRET_KEY").expect("Failed to get secret key");
+
+  let token = handle(
+    decode::<token::Claims>(
+      token,
+      &DecodingKey::from_secret(key.as_ref()),
+      &Validation::new(Algorithm::HS256),
+    ),
+    "Decoding JWT",
+  )?;
+
+  Ok(token.claims)
 }

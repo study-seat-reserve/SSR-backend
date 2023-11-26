@@ -1,8 +1,6 @@
-use bcrypt::{hash, DEFAULT_COST};
+use crate::{model::*, utils::*};
 use chrono::NaiveDate;
 use rusqlite::{params, Connection, Result};
-
-use crate::{model::*, utils::*};
 
 fn connect_to_db() -> Result<Connection> {
   log::debug!("Connecting to db");
@@ -62,13 +60,13 @@ pub fn init_db() {
   conn
     .execute(
       "CREATE TABLE IF NOT EXISTS Reservations (
-         user_id TEXT NOT NULL,
+         user_name TEXT NOT NULL,
          seat_id INTEGER NOT NULL,
          date TEXT NOT NULL,
          start_time INTEGER NOT NULL,
          end_time INTEGER NOT NULL,
-         PRIMARY KEY (user_id, Date),
-         FOREIGN KEY(user_id) REFERENCES Users(user_id),
+         PRIMARY KEY (user_name, Date),
+         FOREIGN KEY(user_name) REFERENCES Users(user_name),
          FOREIGN KEY(seat_id) REFERENCES Seats(seat_id)
      )",
       [],
@@ -148,6 +146,34 @@ pub fn insert_new_user_info(
   Ok(())
 }
 
+pub fn get_user_info(user_name: &str) -> Result<user::UserInfo, Status> {
+  let conn = handle(connect_to_db(), "Connecting to db")?;
+
+  let mut stmt = handle(
+    conn.prepare(
+      "SELECT *
+      FROM Users
+      WHERE user_name = ?",
+    ),
+    "Selecting user info",
+  )?;
+
+  let user_info = handle(
+    stmt.query_row(params![user_name], |row| {
+      Ok(user::UserInfo {
+        user_name: row.get(1)?,
+        password: row.get(2)?,
+        email: row.get(3)?,
+        user_role: row.get(4)?,
+        verified: row.get(5)?,
+      })
+    }),
+    "Query mapping",
+  )?;
+
+  Ok(user_info)
+}
+
 pub fn update_user_verified_by_token(verification_token: &str) -> Result<(), Status> {
   let conn = handle(connect_to_db(), "Connecting to db")?;
 
@@ -195,9 +221,6 @@ pub fn check_if_user_name_exists(user_name: &str) -> Result<bool, Status> {
     Ok(false)
   }
 }
-
-// 登入
-pub fn login() {}
 
 // 查詢所有位置在特定時間點狀態
 pub fn get_all_seats_status(date: NaiveDate, time: u32) -> Result<seat::AllSeatsStatus, Status> {
@@ -342,7 +365,7 @@ pub fn get_seat_reservations(date: NaiveDate, seat_id: u16) -> Result<Vec<(u32, 
 
 // 預約座位
 pub fn reserve_seat(
-  user_id: &str,
+  user_name: &str,
   seat_id: u16,
   date: NaiveDate,
   start_time: u32,
@@ -379,8 +402,8 @@ pub fn reserve_seat(
 
   handle(
     tx.execute(
-      "INSERT INTO Reservations (user_id, seat_id, date, start_time, end_time) VALUES (?1, ?2, ?3, ?4, ?5)",
-      params![user_id, seat_id, date, start_time, end_time],
+      "INSERT INTO Reservations (user_name, seat_id, date, start_time, end_time) VALUES (?1, ?2, ?3, ?4, ?5)",
+      params![user_name, seat_id, date, start_time, end_time],
     ),
     "Inserting new Reservation information",
   )?;
@@ -391,7 +414,7 @@ pub fn reserve_seat(
 }
 
 pub fn update_reservation_time(
-  user_id: &str,
+  user_name: &str,
   date: NaiveDate,
   new_start_time: u32,
   new_end_time: u32,
@@ -405,7 +428,7 @@ pub fn update_reservation_time(
       tx.prepare(
         "SELECT EXISTS(
             SELECT 1 FROM Reservations
-            WHERE user_id != ?
+            WHERE user_name != ?
             AND date = ?
             AND  (MAX(?, start_time) < MIN(?, end_time))
         )",
@@ -415,7 +438,7 @@ pub fn update_reservation_time(
 
     is_overlapping = handle(
       stmt.query_row(
-        params![user_id, date, new_start_time, new_end_time],
+        params![user_name, date, new_start_time, new_end_time],
         |row| row.get(0),
       ),
       "Query mapping",
@@ -431,8 +454,8 @@ pub fn update_reservation_time(
 
   let affected_rows = handle(
     tx.execute(
-      "UPDATE Reservations SET start_time = ?, end_time = ? WHERE user_id = ? AND date = ?",
-      params![new_start_time, new_end_time, user_id, date],
+      "UPDATE Reservations SET start_time = ?, end_time = ? WHERE user_name = ? AND date = ?",
+      params![new_start_time, new_end_time, user_name, date],
     ),
     "Updating reservation",
   )?;
@@ -449,13 +472,13 @@ pub fn update_reservation_time(
   Ok(())
 }
 
-pub fn delete_reservation_time(user_id: &str, date: NaiveDate) -> Result<(), Status> {
+pub fn delete_reservation_time(user_name: &str, date: NaiveDate) -> Result<(), Status> {
   let conn = handle(connect_to_db(), "Connecting to db")?;
 
   let affected_rows = handle(
     conn.execute(
-      "DELETE FROM Reservations WHERE user_id = ?1 AND date = ?2",
-      params![user_id, date],
+      "DELETE FROM Reservations WHERE user_name = ?1 AND date = ?2",
+      params![user_name, date],
     ),
     "Deleting reservation",
   )?;
@@ -468,20 +491,19 @@ pub fn delete_reservation_time(user_id: &str, date: NaiveDate) -> Result<(), Sta
   Ok(())
 }
 
-pub fn get_user_reservations(user_id: &str) -> Result<Vec<reservation::Reservation>, Status> {
+pub fn get_user_reservations(user_name: &str) -> Result<Vec<reservation::Reservation>, Status> {
   let conn = handle(connect_to_db(), "Connecting to db")?;
 
   let date = get_today();
 
   let mut stmt = handle(
     conn
-    .prepare("SELECT seat_id, date, start_time, end_time FROM Reservations WHERE user_id = ?1 AND date >= ?")
+    .prepare("SELECT seat_id, date, start_time, end_time FROM Reservations WHERE user_name = ?1 AND date >= ?")
     ,"Selecting reservations")?;
 
   let reservations_iter = handle(
-    stmt.query_map(params![user_id, date], |row| {
+    stmt.query_map(params![user_name, date], |row| {
       Ok(reservation::Reservation {
-        user_id: user_id.to_owned(),
         seat_id: row.get(0)?,
         date: row.get(1)?,
         start_time: row.get(2)?,

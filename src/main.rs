@@ -45,6 +45,10 @@ fn handle_unprocessable_entity(_: &Request) -> &'static str {
 fn handle_forbidden(_: &Request) -> &'static str {
   "You don't have permission to access this resource"
 }
+#[catch(401)]
+fn unauthorized(_: &Request) -> &'static str {
+  "Unauthorized access"
+}
 #[catch(404)]
 fn handle_not_found(_: &Request) -> &'static str {
   "The resource was not found"
@@ -71,17 +75,19 @@ async fn main() {
     handle_forbidden,
     handle_not_found,
     handle_internal_server_error,
-    handle_service_unavailable
+    handle_service_unavailable,
+    unauthorized
   ];
   let routes = routes![
     register,
+    login,
     show_current_seats_status,
     reserve_seat,
     show_seats_status_by_time,
     show_seat_reservations,
     update_reservation,
     delete_reservation_time,
-    list_user_reservations,
+    display_user_reservations,
     email_verify,
   ];
   let server = rocket::build()

@@ -4,10 +4,8 @@ use crate::{
   utils::*,
 };
 
-use bcrypt::verify;
-use bcrypt::{hash, DEFAULT_COST};
-use chrono::NaiveDate;
-use rocket::{get, http::Status, post, serde::json::Json, State};
+use bcrypt::{hash, verify, DEFAULT_COST};
+use rocket::{get, http::Status, post, serde::json::Json};
 use uuid::Uuid;
 use validator::Validate;
 
@@ -27,33 +25,90 @@ pub async fn register(data: Json<user::User>) -> Result<(), Status> {
 
   database::insert_new_user_info(user_name, &password_hash, email, &verification_token)?;
 
-  let url = format!("{}/api/verify?token={}", get_base_url(), verification_token);
+  let url = format!(
+    "{}/api/verify?verification_token={}",
+    get_base_url(),
+    verification_token
+  );
 
   send_verification_email(&email, &url)?;
 
   log::info!("Finished registration for user: {}", user_name);
+
   Ok(())
 }
 
-#[get("/api/verify?<token>")]
-pub async fn email_verify(token: String) -> Result<String, Status> {
-  log::info!("Verifying email for token: {}", token);
+// #[get("/api/resend_verification_email/<user_name>")]
+// pub fn resend_verification_email(user_name: String) -> Result<(), Status> {
+//   //log
 
-  database::update_user_verified_by_token(&token)?;
+//   let url = format!(
+//     "{}/api/verify?verification_token={}",
+//     get_base_url(),
+//     verification_token
+//   );
 
-  log::info!("Email verification completed for token: {}", token);
+//   send_verification_email(&email, &url)?;
+
+//   log::info!("Finished registration for user: {}", user_name);
+
+//   Ok(())
+// }
+
+#[get("/api/verify?<verification_token>")]
+pub async fn email_verify(verification_token: String) -> Result<String, Status> {
+  log::info!("Verifying email for token: {}", verification_token);
+
+  database::update_user_verified_by_token(&verification_token)?;
+
+  log::info!(
+    "Email verification completed for token: {}",
+    verification_token
+  );
 
   Ok("Your email has been successfully verified.".to_string())
 }
 
 // 登入
-pub async fn login() {
-  // let valid = verify("hunter2", &hashed).unwrap();
+#[post("/api/login", data = "<creds>")]
+pub async fn login(creds: Json<user::LoginCreds>) -> Result<String, Status> {
+  handle_validator(creds.validate())?;
+  log::info!("Processing the login request");
 
-  //TODO: SQL injection
+  let user_info = database::get_user_info(&creds.user_name)?;
+  let username = user_info.user_name.clone();
+  let password_hash = &user_info.password;
+  let verified = user_info.verified;
+
+  let password_matches =
+    verify(&creds.password, &password_hash).map_err(|_| Status::InternalServerError)?;
+
+  if !password_matches {
+    log::warn!("Password is incorrect");
+    return Err(Status::Unauthorized);
+  }
+
+  if !verified {
+    log::warn!("The user's email has not been verified.");
+    return Err(Status::BadRequest);
+  }
+
+  let token = create_token(user_info).map_err(|_| Status::InternalServerError)?;
+
+  log::info!("User: {} login successful", username);
+
+  Ok(token)
 }
 
 // 查詢當前所有位置狀態
+/*
+如果now在unavailable timeslot中回傳
+Unavailable
+否則若是在Reservations中回傳
+Borrowed
+否則是
+Available
+*/
 #[get("/api/show_status")]
 pub async fn show_current_seats_status() -> Result<String, Status> {
   log::info!("Show current seats status");
@@ -68,14 +123,15 @@ pub async fn show_current_seats_status() -> Result<String, Status> {
       date,
       now
     );
+
     let mut seats_vec = Vec::<seat::SeatStatus>::new();
-    for s in 1..NUMBER_OF_SEATS {
+
+    for seat in 1..NUMBER_OF_SEATS {
       seats_vec.push(seat::SeatStatus {
-        seat_id: s,
+        seat_id: seat,
         status: seat::Status::Unavailable,
       })
     }
-
     all_seats_status = seat::AllSeatsStatus { seats: seats_vec };
   } else {
     all_seats_status = database::get_all_seats_status(date, now)?;
@@ -88,19 +144,16 @@ pub async fn show_current_seats_status() -> Result<String, Status> {
 
   log::info!("Show current seats status successfully");
 
-  /*
-  如果now在unavailable timeslot中回傳
-  Unavailable
-  否則若是在Reservations中回傳
-  Borrowed
-  否則是
-  Available
-  */
-
   Ok(json)
 }
 
 // 查詢當前所有位置狀態 + filter
+/*
+如果給定的時間段中有重疊到被預約的時段則回傳
+Borrowed
+否則回傳
+Available
+*/
 #[get("/api/show_status/<date>/<start_time>/<end_time>")]
 pub async fn show_seats_status_by_time(
   date: &str,
@@ -120,13 +173,6 @@ pub async fn show_seats_status_by_time(
   )?;
 
   log::info!("Show seats status by time successfully");
-
-  /*
-  如果給定的時間段中有重疊到被預約的時段則回傳
-  Borrowed
-  否則回傳
-  Available
-  */
 
   Ok(json)
 }
@@ -154,17 +200,19 @@ pub async fn show_seat_reservations(date: &str, seat_id: u16) -> Result<String, 
 
 // 預約座位
 #[post("/api/reserve", format = "json", data = "<reservation>")]
-pub async fn reserve_seat(reservation: Json<reservation::Reservation>) -> Result<(), Status> {
+pub async fn reserve_seat(
+  claims: token::Claims,
+  reservation: Json<reservation::Reservation>,
+) -> Result<(), Status> {
   handle_validator(reservation.validate())?;
   let reservation_data: reservation::Reservation = reservation.into_inner();
-
-  let user_id = reservation_data.user_id;
   let seat_id = reservation_data.seat_id;
   let date = reservation_data.date;
   let start_time = reservation_data.start_time;
   let end_time = reservation_data.end_time;
+  let user_name = claims.user;
 
-  log::info!("Reserving a seat :{} for user: {}", seat_id, user_id);
+  log::info!("Reserving a seat :{} for user: {}", seat_id, user_name);
 
   if !database::is_seat_available(seat_id)? {
     log::warn!("The seat: {} is unavailable", seat_id);
@@ -181,12 +229,12 @@ pub async fn reserve_seat(reservation: Json<reservation::Reservation>) -> Result
     return Err(Status::Conflict);
   }
 
-  database::reserve_seat(&user_id, seat_id, date, start_time, end_time)?;
+  database::reserve_seat(&user_name, seat_id, date, start_time, end_time)?;
 
   log::info!(
-    "Seat: {} reserved successfully for user_id: {}",
+    "Seat: {} reserved successfully for user: {}",
     seat_id,
-    user_id
+    user_name
   );
 
   Ok(())
@@ -199,25 +247,25 @@ pub async fn reserve_seat(reservation: Json<reservation::Reservation>) -> Result
   data = "<update_reservation>"
 )]
 pub async fn update_reservation(
+  claims: token::Claims,
   update_reservation: Json<reservation::UpdateReservation>,
 ) -> Result<(), Status> {
   handle_validator(update_reservation.validate())?;
   let update_data: reservation::UpdateReservation = update_reservation.into_inner();
-
-  let user_id = update_data.user_id;
   let date = update_data.date;
   let new_start_time = update_data.new_start_time;
   let new_end_time = update_data.new_end_time;
+  let user_name = claims.user;
 
-  log::info!("Updating reservation for user: {}", user_id);
+  log::info!("Updating reservation for user: {}", user_name);
 
   if database::is_overlapping_with_unavailable_timeslot(date, new_start_time, new_end_time)? {
     return Err(Status::Conflict);
   }
 
-  database::update_reservation_time(&user_id, date, new_start_time, new_end_time)?;
+  database::update_reservation_time(&user_name, date, new_start_time, new_end_time)?;
 
-  log::info!("Reservation for user: {} updated successfully", user_id);
+  log::info!("Reservation for user: {} updated successfully", user_name);
 
   Ok(())
 }
@@ -229,33 +277,36 @@ pub async fn update_reservation(
   data = "<delete_reservation>"
 )]
 pub async fn delete_reservation_time(
+  claims: token::Claims,
   delete_reservation: Json<reservation::DeleteReservation>,
 ) -> Result<(), Status> {
   handle_validator(delete_reservation.validate())?;
   let update_data: reservation::DeleteReservation = delete_reservation.into_inner();
-
-  let user_id = update_data.user_id;
   let date = update_data.date;
+  let user_name = claims.user;
 
-  log::info!("Deleting reservation for user: {}", user_id);
+  log::info!("Deleting reservation for user: {}", user_name);
 
-  database::delete_reservation_time(&user_id, date)?;
+  database::delete_reservation_time(&user_name, date)?;
 
-  log::info!("Reservation for user: {} deleted successfully", user_id);
+  log::info!("Reservation for user: {} deleted successfully", user_name);
 
   Ok(())
 }
 
 // 顯示使用者預約時段
-#[get("/api/user_reservations/<user_id>")]
-pub async fn list_user_reservations(
-  user_id: String,
+#[get("/api/user_reservations")]
+pub async fn display_user_reservations(
+  claims: token::Claims,
 ) -> Result<Json<Vec<reservation::Reservation>>, Status> {
-  log::info!("List user reservations");
+  let user_name = claims.user;
 
-  let reservations = database::get_user_reservations(&user_id)?;
+  log::info!("Displaying the user's reservations");
 
-  log::info!("List user reservations successfully");
+  let reservations = database::get_user_reservations(&user_name)?;
+
+  log::info!("Displaying the user's reservations successfully");
+
   Ok(Json(reservations))
 }
 
