@@ -1,3 +1,5 @@
+use std::{io::ErrorKind, str::FromStr};
+
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 
@@ -9,8 +11,38 @@ pub struct User {
   pub user_name: String,
   #[validate(length(min = 8, max = 20))]
   pub password: String,
-  #[validate(email, contains = "@mail.ntou.edu.tw")]
+  // #[validate(email, contains = "@mail.ntou.edu.tw")]
+  #[validate(email)]
   pub email: String,
+}
+
+pub enum UserRole {
+  RegularUser,
+  Admin,
+}
+
+impl ToString for UserRole {
+  fn to_string(&self) -> String {
+    match *self {
+      UserRole::RegularUser => "RegularUser".to_owned(),
+      UserRole::Admin => "Admin".to_owned(),
+    }
+  }
+}
+
+impl FromStr for UserRole {
+  type Err = std::io::Error;
+
+  fn from_str(s: &str) -> Result<Self, Self::Err> {
+    match s {
+      "RegularUser" => Ok(UserRole::RegularUser),
+      "Admin" => Ok(UserRole::Admin),
+      _ => Err(std::io::Error::new(
+        ErrorKind::InvalidInput,
+        "Provided string does not match any UserRole variant",
+      )),
+    }
+  }
 }
 
 fn validate_username(user_name: &str) -> Result<(), ValidationError> {

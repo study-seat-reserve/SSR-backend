@@ -5,6 +5,7 @@ use crate::{
 };
 
 use bcrypt::verify;
+use bcrypt::{hash, DEFAULT_COST};
 use chrono::NaiveDate;
 use rocket::{get, http::Status, post, serde::json::Json, State};
 use uuid::Uuid;
@@ -14,26 +15,35 @@ use validator::Validate;
 #[post("/api/register", format = "json", data = "<data>")]
 pub async fn register(data: Json<user::User>) -> Result<(), Status> {
   handle_validator(data.validate())?;
-  if database::check_if_user_name_exists(&data.user_name)? {
-    return Err(Status::Conflict);
-  }
 
-  /* if let true = database::check_if_email_exists(&data.user_name)? {
-    return Err(Status::Conflict);
-  } */
+  let user_name = &data.user_name;
+  let password = &data.password;
+  let email = &data.email;
 
-  let user_id = Uuid::new_v4().to_string();
+  log::info!("Handling registration for user: {}", user_name);
 
-  log::info!("Handling registration for user: {}", &user_id);
+  let password_hash = handle(hash(password, DEFAULT_COST), "Hashing password")?;
+  let verification_token = Uuid::new_v4().to_string();
 
-  let user = data.into_inner();
+  database::insert_new_user_info(user_name, &password_hash, email, &verification_token)?;
 
-  database::insert_new_user_info(user, &user_id)?;
+  let url = format!("{}/api/verify?token={}", get_base_url(), verification_token);
 
-  //TODO: 信箱驗證
+  send_verification_email(&email, &url)?;
 
-  log::info!("Finished registration for user: {}", &user_id);
+  log::info!("Finished registration for user: {}", user_name);
   Ok(())
+}
+
+#[get("/api/verify?<token>")]
+pub async fn email_verify(token: String) -> Result<String, Status> {
+  log::info!("Verifying email for token: {}", token);
+
+  database::update_user_verified_by_token(&token)?;
+
+  log::info!("Email verification completed for token: {}", token);
+
+  Ok("Your email has been successfully verified.".to_string())
 }
 
 // 登入

@@ -1,10 +1,11 @@
 use crate::model::constant::*;
 use chrono::{Duration, Local, NaiveDate, NaiveDateTime, NaiveTime, Timelike};
+use lettre::{
+  message::Mailbox, transport::smtp::authentication::Credentials, Message, SmtpTransport, Transport,
+};
 use reqwest;
 pub use rocket::http::Status;
 use rusqlite::{Error as SqliteError, ErrorCode};
-use validator::ValidationErrorsKind;
-
 use std::{
   cmp::{max, min},
   collections::HashMap,
@@ -14,6 +15,7 @@ use std::{
   path::{Path, PathBuf},
   time::{SystemTime, UNIX_EPOCH},
 };
+use validator::ValidationErrorsKind;
 
 pub fn handle<T, E>(result: Result<T, E>, prefix: &str) -> Result<T, Status>
 where
@@ -147,6 +149,51 @@ pub fn validate_datetime(date: NaiveDate, start_time: u32, end_time: u32) -> Res
     log::error!("Invalid start_time: start time > end time");
     return Err(Status::UnprocessableEntity);
   }
+
+  Ok(())
+}
+
+pub fn get_root() -> String {
+  env::var("ROOT").expect("Failed to get root path")
+}
+
+pub fn get_base_url() -> String {
+  env::var("BASE_URL").expect("Failed to get base url")
+}
+
+pub fn send_verification_email(email: &str, url: &str) -> Result<(), Status> {
+  let email_address_str = env::var("EMAIL_ADDRESS").expect("Failed to get email address");
+  let email_password = env::var("EMAIL_PASSWORD").expect("Failed to get email password");
+  let email_domain = env::var("EMAIL_DOMAIN").expect("Failed to get email domain");
+
+  let email_address = handle(
+    email_address_str.parse::<Mailbox>(),
+    "Parsing email address",
+  )?;
+  let user_email = handle(email.parse::<Mailbox>(), "Parsing user email")?;
+
+  let email = handle(
+    Message::builder()
+      .to(user_email)
+      .from(email_address)
+      .subject("Verify your email")
+      .body(format!(
+        "Please click on the link to verify your email: {}",
+        url
+      )),
+    "Building email",
+  )?;
+
+  let creds = Credentials::new(email_address_str, email_password);
+
+  let mailer = handle(
+    SmtpTransport::relay(&format!("smtp.{}.com", email_domain)),
+    "Setting SMTP server address",
+  )?
+  .credentials(creds)
+  .build();
+
+  handle(mailer.send(&email), "Sending email")?;
 
   Ok(())
 }

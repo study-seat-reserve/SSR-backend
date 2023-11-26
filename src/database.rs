@@ -1,15 +1,13 @@
 use bcrypt::{hash, DEFAULT_COST};
 use chrono::NaiveDate;
 use rusqlite::{params, Connection, Result};
-use std::env;
 
 use crate::{model::*, utils::*};
 
 fn connect_to_db() -> Result<Connection> {
   log::debug!("Connecting to db");
 
-  let root = env::var("ROOT").expect("Failed to get root path");
-  let path = format!("{}/SSR.db3", root);
+  let path = format!("{}/SSR.db3", get_root());
   log::debug!("path={}", path);
 
   Connection::open(path)
@@ -19,8 +17,7 @@ fn connect_to_db() -> Result<Connection> {
 pub fn init_db() {
   log::info!("Initializing db");
 
-  let root = env::var("ROOT").expect("Failed to get root path");
-  let path: String = format!("{}/SSR.db3", root);
+  let path: String = format!("{}/SSR.db3", get_root());
   log::debug!("path={}", path);
 
   let conn = Connection::open(path).unwrap_or_else(|e| {
@@ -48,11 +45,12 @@ pub fn init_db() {
     .execute(
       "CREATE TABLE IF NOT EXISTS Users (
          id INTEGER PRIMARY KEY AUTOINCREMENT,
-         user_id TEXT NOT NULL UNIQUE,
          user_name TEXT NOT NULL UNIQUE,
          password_hash TEXT NOT NULL,
-         blacklist INTEGER DEFAULT 0,
-         email TEXT NOT NULL UNIQUE
+         email TEXT NOT NULL UNIQUE,
+         user_role TEXT NOT NULL,
+         verified BOOLEAN NOT NULL,
+         verification_token TEXT
      )",
       [],
     )
@@ -106,7 +104,7 @@ fn init_seat_info(conn: &Connection) {
       panic!("Failed to create TimeSlots table: {}", e);
     });
 
-  if count < constant::NUMBER_OF_SEATS {
+  if count <= constant::NUMBER_OF_SEATS {
     log::info!("Initializing Seats table");
 
     for i in (count + 1)..=constant::NUMBER_OF_SEATS {
@@ -127,22 +125,45 @@ fn init_seat_info(conn: &Connection) {
 }
 
 // 註冊
-pub fn insert_new_user_info(user: user::User, user_id: &str) -> Result<(), Status> {
+pub fn insert_new_user_info(
+  user_name: &str,
+  password_hash: &str,
+  email: &str,
+  verification_token: &str,
+) -> Result<(), Status> {
   log::info!("Inserting new user information");
-
-  let password_hash = handle(hash(user.password, DEFAULT_COST), "Hashing password")?;
 
   let conn = handle(connect_to_db(), "Connecting to db")?;
 
+  let user_role = user::UserRole::RegularUser.to_string();
   handle(
     conn.execute(
-      "INSERT INTO Users (user_id, user_name, password_hash, blacklist, email) VALUES (?1, ?2, ?3, ?4, ?5)",
-      params![user_id, user.user_name, password_hash, 0, user.email],
+      "INSERT INTO Users (user_name, password_hash, email, user_role, verified, verification_token) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+      params![user_name, password_hash, email, user_role, false, verification_token],
     ),
     "Inserting new user information",
   )?;
 
   log::info!("Successfully inserted new user information");
+  Ok(())
+}
+
+pub fn update_user_verified_by_token(verification_token: &str) -> Result<(), Status> {
+  let conn = handle(connect_to_db(), "Connecting to db")?;
+
+  let affected_rows = handle(
+    conn.execute(
+      "UPDATE Users SET verified = true WHERE verification_token = ?1",
+      params![verification_token],
+    ),
+    "Updating user verified by verification_token",
+  )?;
+
+  if affected_rows == 0 {
+    log::warn!("No Users found for updation");
+    return Err(Status::NotFound);
+  }
+
   Ok(())
 }
 

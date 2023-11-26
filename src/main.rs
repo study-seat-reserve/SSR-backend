@@ -82,6 +82,7 @@ async fn main() {
     update_reservation,
     delete_reservation_time,
     list_user_reservations,
+    email_verify,
   ];
   let server = rocket::build()
     .register("/", catchers)

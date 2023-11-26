@@ -25,6 +25,7 @@ uuid = { version = "1.5.0", features = ["v4", "serde", "fast-rng"] }
 # validators = { version = "0.24", features = ["rocket"] }
 validator = { version = "0.16", features = ["derive"] }
 lazy_static = "1.4.0"
+lettre = "0.10"
 
 [profile.dev]
 debug = true

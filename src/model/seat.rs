@@ -1,7 +1,5 @@
 use serde::{Deserialize, Serialize};
-use std::io::ErrorKind;
-use std::str::FromStr;
-use std::string::ToString;
+use std::{io::ErrorKind, str::FromStr, string::ToString};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Seat {
@@ -48,7 +46,7 @@ impl FromStr for Status {
       "Borrowed" => Ok(Status::Borrowed),
       _ => Err(std::io::Error::new(
         ErrorKind::InvalidInput,
-        "provided string does not match any Status variant",
+        "Provided string does not match any Status variant",
       )),
     }
   }
