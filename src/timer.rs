@@ -1,11 +1,12 @@
 use crate::{database, utils::*};
-use std::{env, fs};
+use chrono::Datelike;
+use std::fs;
 use tokio::time::sleep;
 
 pub async fn start() {
   log::info!("Starting timmer!");
   delete_logfile();
-  //   delete_data();
+  set_unavailable_timeslots();
   loop {
     let tomorrow_midnight = get_tomorrow_midnight();
     let duration = tomorrow_midnight - get_datetime();
@@ -14,14 +15,14 @@ pub async fn start() {
 
     sleep(std_duration).await;
     delete_logfile();
-    // delete_data();
+    set_unavailable_timeslots();
   }
 }
 
 fn delete_logfile() {
   log::info!("Deleting logfiles");
 
-  let root = env::var("ROOT").expect("Failed to get root path");
+  let root = get_root();
   let path = root + "/logfiles";
   log::debug!("path={}", path);
 
@@ -57,4 +58,27 @@ fn delete_logfile() {
   }
 }
 
-// pub fn delete_data() -> Result<(), Status> {}
+pub fn set_unavailable_timeslots() {
+  log::info!("Setting unavailable timeslots");
+
+  let today = get_today();
+
+  for i in 0..=3 {
+    let future_date = today + chrono::Duration::days(i);
+    let weekday = future_date.weekday();
+    let is_holiday = weekday == chrono::Weekday::Sat || weekday == chrono::Weekday::Sun;
+
+    let mut time_slots = Vec::new();
+
+    if is_holiday {
+      time_slots.push((000000, 090000));
+      time_slots.push((170000, 240000));
+    } else {
+      time_slots.push((000000, 080000));
+      time_slots.push((220000, 240000));
+    }
+
+    database::insert_unavailable_timeslots(future_date, time_slots)
+      .expect("Inserting unavailable timeslots failed");
+  }
+}

@@ -69,6 +69,7 @@ async fn main() {
   logger::init_logger(log::LevelFilter::Info);
 
   database::init_db();
+  tokio::spawn(timer::start());
 
   let catchers = catchers![
     handle_unprocessable_entity,

@@ -193,6 +193,28 @@ pub fn update_user_verified_by_token(verification_token: &str) -> Result<(), Sta
   Ok(())
 }
 
+pub fn insert_unavailable_timeslots(
+  date: NaiveDate,
+  timelosts: Vec<(u32, u32)>,
+) -> Result<(), Status> {
+  let mut conn = handle(connect_to_db(), "Connecting to db")?;
+  let tx = handle(conn.transaction(), "Starting new transaction")?;
+
+  for (start_time, end_time) in timelosts {
+    handle(
+      tx.execute(
+        "INSERT INTO UnavailableTimeSlots (date, start_time, end_time) VALUES (?, ?, ?)",
+        params![date, start_time, end_time],
+      ),
+      "Inserting new Reservation information",
+    )?;
+  }
+
+  handle(tx.commit(), "Commiting transcation")?;
+
+  Ok(())
+}
+
 // 檢查用戶名
 pub fn check_if_user_name_exists(user_name: &str) -> Result<bool, Status> {
   log::info!(
@@ -544,7 +566,7 @@ pub fn is_overlapping_with_unavailable_timeslot(
   )?;
 
   let is_overlapping: bool = handle(
-    stmt.query_row(params![date, end_time, start_time], |row| row.get(0)),
+    stmt.query_row(params![date, start_time, end_time], |row| row.get(0)),
     "Query mapping",
   )?;
 
