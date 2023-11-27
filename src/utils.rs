@@ -329,7 +329,7 @@ mod tests {
     let test_email = "test@example.com";
     let test_url = "https://test.com/test";
 
-    let _result = send_verification_email(test_email, test_url);
+    let result = send_verification_email(test_email, test_url);
 
     assert!(result.is_ok());
   }
