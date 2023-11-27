@@ -27,6 +27,8 @@ validator = { version = "0.16", features = ["derive"] }
 lazy_static = "1.4.0"
 lettre = "0.10"
 jsonwebtoken = "9.1"
+tempfile = "3.8.1"
+
 
 
 [profile.dev]

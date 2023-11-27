@@ -58,8 +58,6 @@ fn test_claims_serialization() {
 
 #[test]
 fn test_token_encoding_decoding() {
-  // Test token encoding and decoding
-
   let test_userinfo = UserInfo {
     user_name: TEST_USERNAME.to_string(),
     password: "test_password".to_string(),
