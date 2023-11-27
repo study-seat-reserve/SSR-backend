@@ -1,6 +1,6 @@
 use super::user;
 use crate::utils::*;
-use chrono::Utc;
+use chrono::{Duration, Utc};
 use rocket::request::{FromRequest, Outcome, Request};
 use serde::{Deserialize, Serialize};
 
@@ -74,7 +74,7 @@ fn test_token_encoding_decoding() {
   let header = Header::default();
 
   let expiration = Utc::now()
-    .checked_add_signed(chrono::Duration::hours(1))
+    .checked_add_signed(Duration::hours(1))
     .expect("valid timestamp")
     .timestamp() as usize;
 

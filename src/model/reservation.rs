@@ -99,7 +99,7 @@ fn validate_reservation(reservation: &Reservation) -> Result<(), ValidationError
 mod tests {
 
   use super::*;
-  use chrono::{Local, Utc};
+  use chrono::Local;
   use validator::ValidationError;
 
   #[test]

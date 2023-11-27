@@ -215,34 +215,34 @@ pub fn insert_unavailable_timeslots(
   Ok(())
 }
 
-// 檢查用戶名
-pub fn check_if_user_name_exists(user_name: &str) -> Result<bool, Status> {
-  log::info!(
-    "Checking if username: '{}' exists in the database",
-    user_name
-  );
+// // 檢查用戶名
+// pub fn check_if_user_name_exists(user_name: &str) -> Result<bool, Status> {
+//   log::info!(
+//     "Checking if username: '{}' exists in the database",
+//     user_name
+//   );
 
-  let conn = handle(connect_to_db(), "Connecting to db")?;
+//   let conn = handle(connect_to_db(), "Connecting to db")?;
 
-  let count: u64 = handle(
-    conn.query_row(
-      "SELECT COUNT(*) FROM Users WHERE user_name = ?1",
-      params![user_name],
-      |row| row.get(0),
-    ),
-    "Querying select operation",
-  )?;
+//   let count: u64 = handle(
+//     conn.query_row(
+//       "SELECT COUNT(*) FROM Users WHERE user_name = ?1",
+//       params![user_name],
+//       |row| row.get(0),
+//     ),
+//     "Querying select operation",
+//   )?;
 
-  if count > 0 {
-    log::debug!("username: {} exists", user_name);
+//   if count > 0 {
+//     log::debug!("username: {} exists", user_name);
 
-    Ok(true)
-  } else {
-    log::debug!("username: {} does not exist", user_name);
+//     Ok(true)
+//   } else {
+//     log::debug!("username: {} does not exist", user_name);
 
-    Ok(false)
-  }
-}
+//     Ok(false)
+//   }
+// }
 
 // 查詢所有位置在特定時間點狀態
 pub fn get_all_seats_status(date: NaiveDate, time: u32) -> Result<seat::AllSeatsStatus, Status> {

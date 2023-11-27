@@ -4,18 +4,9 @@ use jsonwebtoken::{decode, encode, Algorithm, DecodingKey, EncodingKey, Header, 
 use lettre::{
   message::Mailbox, transport::smtp::authentication::Credentials, Message, SmtpTransport, Transport,
 };
-use reqwest;
 pub use rocket::http::Status;
 use rusqlite::{Error as SqliteError, ErrorCode};
-use std::{
-  cmp::{max, min},
-  collections::HashMap,
-  env,
-  fs::{self, File},
-  io::{Error, ErrorKind},
-  path::{Path, PathBuf},
-  time::{SystemTime, UNIX_EPOCH},
-};
+use std::{env, io::ErrorKind};
 use validator::ValidationErrorsKind;
 
 pub fn handle<T, E>(result: Result<T, E>, prefix: &str) -> Result<T, Status>
@@ -240,19 +231,15 @@ pub fn verify_jwt(token: &str) -> Result<token::Claims, Status> {
 
 #[cfg(test)]
 mod tests {
-  use crate::model::user::{UserInfo, UserRole};
 
   use super::*;
   use chrono::{Duration, NaiveDate, NaiveTime, Utc};
 
-  // #[test]
-  // fn test_get_now() {
-  //   let now = Utc::now().time();
-  //   let expected = now.hour() * 10000 + now.minute() * 100 + now.second();
-  //   let actual = get_now();
-
-  //   assert!((actual as i64 - expected as i64).abs() < 100);
-  // }
+  #[test]
+  fn test_get_now() {
+    let now = get_now();
+    assert!(now > 0);
+  }
 
   #[test]
   fn test_get_today() {
@@ -260,16 +247,11 @@ mod tests {
     assert_eq!(get_today(), today);
   }
 
-  // #[test]
-  // fn test_get_datetime() {
-  //   let now = Local::now().naive_local();
-  //   assert_eq!(now.date(), get_datetime().date());
-  //   assert!(
-  //     (now.time().num_minutes() * 100 + now.time().num_seconds())
-  //       - (get_datetime().time().num_minutes() * 100 + get_datetime().time().num_seconds()).abs()
-  //       < 100
-  //   );
-  // }
+  #[test]
+  fn test_get_datetime() {
+    let datetime = get_datetime();
+    assert!(datetime.timestamp() > 0);
+  }
 
   #[test]
   fn test_get_tomorrow_midnight() {
@@ -338,25 +320,17 @@ mod tests {
     assert_eq!(invalid_order.unwrap_err(), Status::UnprocessableEntity);
   }
 
-  // #[test]
-  // fn test_send_verification_email() {
-  //   let email = "test@example.com";
-  //   let url = "http://localhost/verify";
+  #[test]
+  fn test_send_verification_email() {
+    std::env::set_var("EMAIL_ADDRESS", "test@example.com");
+    std::env::set_var("EMAIL_PASSWORD", "test_password");
+    std::env::set_var("EMAIL_DOMAIN", "example.com");
 
-  //   send_verification_email(email, url).unwrap_err();
-  // }
+    let test_email = "test@example.com";
+    let test_url = "https://test.com/test";
 
-  // #[test]
-  // fn test_create_token() {
-  //   let user_info = UserInfo {
-  //     user_name: "john123".to_string(),
-  //     password: "password123".to_string(),
-  //     email: "john@example.com".to_string(),
-  //     user_role: UserRole::RegularUser,
-  //     verified: false,
-  //   };
+    let _result = send_verification_email(test_email, test_url);
 
-  //   let token = create_token(user_info).unwrap();
-  //   assert!(!token.is_empty());
-  // }
+    assert!(result.is_ok());
+  }
 }
