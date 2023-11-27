@@ -235,3 +235,128 @@ pub fn verify_jwt(token: &str) -> Result<token::Claims, Status> {
 
   Ok(token.claims)
 }
+
+// TEST
+
+#[cfg(test)]
+mod tests {
+  use crate::model::user::{UserInfo, UserRole};
+
+  use super::*;
+  use chrono::{Duration, NaiveDate, NaiveTime, Utc};
+
+  // #[test]
+  // fn test_get_now() {
+  //   let now = Utc::now().time();
+  //   let expected = now.hour() * 10000 + now.minute() * 100 + now.second();
+  //   let actual = get_now();
+
+  //   assert!((actual as i64 - expected as i64).abs() < 100);
+  // }
+
+  #[test]
+  fn test_get_today() {
+    let today = Local::now().date_naive();
+    assert_eq!(get_today(), today);
+  }
+
+  // #[test]
+  // fn test_get_datetime() {
+  //   let now = Local::now().naive_local();
+  //   assert_eq!(now.date(), get_datetime().date());
+  //   assert!(
+  //     (now.time().num_minutes() * 100 + now.time().num_seconds())
+  //       - (get_datetime().time().num_minutes() * 100 + get_datetime().time().num_seconds()).abs()
+  //       < 100
+  //   );
+  // }
+
+  #[test]
+  fn test_get_tomorrow_midnight() {
+    let tomorrow = Local::now().date_naive().and_hms_opt(0, 0, 0).unwrap() + Duration::days(1);
+    assert_eq!(get_tomorrow_midnight(), tomorrow);
+  }
+
+  #[test]
+  fn test_get_last_week() {
+    let last_week = Local::now().date_naive() - Duration::days(7);
+    assert_eq!(get_last_week(), last_week);
+  }
+
+  #[test]
+  fn test_date_from_string() {
+    let date_str = "2023-02-15";
+    let expected = NaiveDate::parse_from_str(date_str, "%Y-%m-%d").unwrap();
+
+    assert_eq!(date_from_string(date_str).unwrap(), expected);
+  }
+
+  #[test]
+  fn test_parse_time() {
+    let time = NaiveTime::from_hms_opt(12, 34, 56).expect("Invalid time values");
+    assert_eq!(parse_time(time).unwrap(), 123456);
+  }
+
+  #[test]
+  fn test_validate_seat_id() {
+    validate_seat_id(100).unwrap();
+
+    assert_eq!(
+      validate_seat_id(0).unwrap_err(),
+      Status::UnprocessableEntity
+    );
+  }
+
+  #[test]
+  fn test_validate_date() {
+    let today = Local::now().date_naive();
+    let valid_date = today + Duration::days(1);
+
+    validate_date(valid_date).unwrap();
+
+    let invalid_date = today - Duration::days(1);
+
+    assert_eq!(
+      validate_date(invalid_date).unwrap_err(),
+      Status::UnprocessableEntity
+    );
+  }
+
+  #[test]
+  fn test_validate_datetime() {
+    let tomorrow = Utc::now().date_naive() + Duration::days(1);
+
+    validate_datetime(tomorrow, 800, 1000).unwrap();
+
+    let now = Utc::now().date_naive();
+    assert_eq!(
+      validate_datetime(now, 700, 800).unwrap_err(),
+      Status::UnprocessableEntity
+    );
+
+    let invalid_order = validate_datetime(tomorrow, 800, 700);
+    assert_eq!(invalid_order.unwrap_err(), Status::UnprocessableEntity);
+  }
+
+  // #[test]
+  // fn test_send_verification_email() {
+  //   let email = "test@example.com";
+  //   let url = "http://localhost/verify";
+
+  //   send_verification_email(email, url).unwrap_err();
+  // }
+
+  // #[test]
+  // fn test_create_token() {
+  //   let user_info = UserInfo {
+  //     user_name: "john123".to_string(),
+  //     password: "password123".to_string(),
+  //     email: "john@example.com".to_string(),
+  //     user_role: UserRole::RegularUser,
+  //     verified: false,
+  //   };
+
+  //   let token = create_token(user_info).unwrap();
+  //   assert!(!token.is_empty());
+  // }
+}

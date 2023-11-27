@@ -71,7 +71,7 @@ pub async fn email_verify(verification_token: String) -> Result<String, Status> 
 
 // 登入
 #[post("/api/login", data = "<creds>")]
-pub async fn login(creds: Json<user::LoginCreds>) -> Result<String, Status> {
+pub fn login(creds: Json<user::LoginCreds>) -> Result<String, Status> {
   handle_validator(creds.validate())?;
   log::info!("Processing the login request");
 

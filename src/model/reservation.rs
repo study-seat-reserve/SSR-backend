@@ -92,3 +92,82 @@ fn validate_reservation(reservation: &Reservation) -> Result<(), ValidationError
 
   validate_datetime(date, start_time, end_time)
 }
+
+//TEST
+
+#[cfg(test)]
+mod tests {
+
+  use super::*;
+  use chrono::{Local, Utc};
+  use validator::ValidationError;
+
+  #[test]
+  fn test_validate_seat_id() {
+    // Valid
+    assert!(validate_seat_id(100).is_ok());
+
+    // Invalid
+    assert!(validate_seat_id(0).is_err());
+    assert!(validate_seat_id(500).is_err());
+
+    // Check error type
+    assert_eq!(
+      validate_seat_id(0).err().unwrap(),
+      ValidationError::new("Seat id out of range")
+    );
+  }
+
+  #[test]
+  fn test_validate_date() {
+    // Valid
+    let valid_date = Local::now().date_naive() + chrono::Duration::days(1);
+    assert!(validate_date(&valid_date).is_ok());
+
+    // Invalid
+    let invalid_date = Local::now().date_naive() - chrono::Duration::days(1);
+    assert!(validate_date(&invalid_date).is_err());
+
+    // Check error
+    assert_eq!(
+      validate_date(&invalid_date).err().unwrap(),
+      ValidationError::new("Invalid reservation date")
+    );
+  }
+
+  #[test]
+  fn test_validate_datetime() {
+    // Valid
+    let tomorrow = Local::now().date_naive() + chrono::Duration::days(1);
+    assert!(validate_datetime(tomorrow, 800, 1000).is_ok());
+
+    // Invalid start time
+    let now = Local::now().date_naive();
+    assert!(validate_datetime(now, 700, 800).is_err());
+
+    // Invalid order
+    let tomorrow = Local::now().date_naive() + chrono::Duration::days(1);
+    assert!(validate_datetime(tomorrow, 800, 700).is_err());
+  }
+
+  #[test]
+  fn test_validate_reservation() {
+    let reservation = Reservation {
+      seat_id: 100,
+      date: Local::now().date_naive() + chrono::Duration::days(1),
+      start_time: 800,
+      end_time: 1000,
+    };
+
+    assert!(validate_reservation(&reservation).is_ok());
+
+    let invalid_reservation = Reservation {
+      seat_id: 0,
+      date: Local::now().date_naive() - chrono::Duration::days(1),
+      start_time: 800,
+      end_time: 700,
+    };
+
+    assert!(validate_reservation(&invalid_reservation).is_err());
+  }
+}
