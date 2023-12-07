@@ -4,19 +4,14 @@ use jsonwebtoken::{decode, encode, Algorithm, DecodingKey, EncodingKey, Header, 
 use lettre::{
   message::Mailbox, transport::smtp::authentication::Credentials, Message, SmtpTransport, Transport,
 };
-use reqwest;
-pub use rocket::http::Status;
-use rusqlite::{Error as SqliteError, ErrorCode};
+use sqlx::Error as SqlxError;
 use std::{
-  cmp::{max, min},
-  collections::HashMap,
   env,
-  fs::{self, File},
-  io::{Error, ErrorKind},
-  path::{Path, PathBuf},
-  time::{SystemTime, UNIX_EPOCH},
+  io::{Error as IoError, ErrorKind},
 };
 use validator::ValidationErrorsKind;
+
+pub use rocket::http::Status;
 
 pub fn handle<T, E>(result: Result<T, E>, prefix: &str) -> Result<T, Status>
 where
@@ -27,26 +22,28 @@ where
 
     let dyn_error: &dyn std::error::Error = &err;
 
-    if let Some(e) = dyn_error.downcast_ref::<std::io::Error>() {
+    if let Some(e) = dyn_error.downcast_ref::<IoError>() {
       match e.kind() {
         ErrorKind::NotFound => Status::NotFound,
         ErrorKind::PermissionDenied => Status::Forbidden,
         ErrorKind::ConnectionRefused => Status::ServiceUnavailable,
         _ => Status::InternalServerError,
       }
-    } else if let Some(e) = dyn_error.downcast_ref::<rusqlite::Error>() {
-      match e {
-        SqliteError::SqliteFailure(se, _) => match se.code {
-          ErrorCode::ConstraintViolation | ErrorCode::TypeMismatch => Status::UnprocessableEntity,
-          ErrorCode::PermissionDenied => Status::Forbidden,
-          ErrorCode::NotFound => Status::NotFound,
-          ErrorCode::DatabaseBusy | ErrorCode::DatabaseLocked => Status::ServiceUnavailable,
-          _ => Status::InternalServerError,
-        },
-        _ => Status::InternalServerError,
-      }
     } else {
       Status::InternalServerError
+    }
+  })
+}
+
+pub fn handle_sqlx<T>(result: Result<T, SqlxError>, prefix: &str) -> Result<T, Status> {
+  result.map_err(|err| {
+    log::error!("{} failed with error: {:?}", prefix, err);
+
+    match &err {
+      SqlxError::RowNotFound => Status::NotFound,
+      SqlxError::ColumnNotFound(_) => Status::BadRequest,
+      SqlxError::ColumnIndexOutOfBounds { .. } => Status::BadRequest,
+      _ => Status::InternalServerError,
     }
   })
 }

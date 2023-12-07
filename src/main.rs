@@ -5,6 +5,8 @@ mod model;
 mod timer;
 mod utils;
 
+use std::env;
+
 use api::*;
 use dotenv::dotenv;
 use rocket::{
@@ -13,6 +15,8 @@ use rocket::{
   http::Header,
   routes, {Request, Response},
 };
+
+use sqlx::SqlitePool;
 
 pub struct CORS;
 
@@ -68,8 +72,15 @@ async fn main() {
   dotenv().ok();
   logger::init_logger(log::LevelFilter::Info);
 
-  database::init_db();
-  tokio::spawn(timer::start());
+  let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
+  let pool = SqlitePool::connect_lazy(&database_url).expect("Failed to create pool.");
+  let pool_clone = pool.clone();
+
+  database::init_db(&pool_clone).await;
+
+  tokio::spawn(async move {
+    timer::start(&pool_clone).await;
+  });
 
   let catchers = catchers![
     handle_unprocessable_entity,
@@ -95,7 +106,7 @@ async fn main() {
     .register("/", catchers)
     .mount("/", routes)
     .attach(CORS)
-    // .manage()
+    .manage(pool)
     .launch();
 
   tokio::select! {

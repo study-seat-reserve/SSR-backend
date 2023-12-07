@@ -1,12 +1,13 @@
 use crate::{database, utils::*};
 use chrono::Datelike;
+use sqlx::{Pool, Sqlite};
 use std::fs;
 use tokio::time::sleep;
 
-pub async fn start() {
+pub async fn start(pool: &Pool<Sqlite>) {
   log::info!("Starting timmer!");
   delete_logfile();
-  set_unavailable_timeslots();
+  set_unavailable_timeslots(pool).await;
   loop {
     let tomorrow_midnight = get_tomorrow_midnight();
     let duration = tomorrow_midnight - get_datetime();
@@ -15,7 +16,7 @@ pub async fn start() {
 
     sleep(std_duration).await;
     delete_logfile();
-    set_unavailable_timeslots();
+    set_unavailable_timeslots(pool).await;
   }
 }
 
@@ -58,7 +59,7 @@ fn delete_logfile() {
   }
 }
 
-pub fn set_unavailable_timeslots() {
+pub async fn set_unavailable_timeslots(pool: &Pool<Sqlite>) {
   log::info!("Setting unavailable timeslots");
 
   let today = get_today();
@@ -78,7 +79,8 @@ pub fn set_unavailable_timeslots() {
       time_slots.push((220000, 240000));
     }
 
-    database::insert_unavailable_timeslots(future_date, time_slots)
-      .expect("Inserting unavailable timeslots failed");
+    database::insert_unavailable_timeslots(pool, future_date, time_slots)
+      .await
+      .expect("Failed to insert unavailable timeslots");
   }
 }

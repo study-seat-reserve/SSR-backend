@@ -2,6 +2,7 @@ use super::constant::*;
 use crate::utils::{get_now, get_today};
 use chrono::{Duration, NaiveDate};
 use serde::{Deserialize, Serialize};
+use sqlx::{sqlite::SqliteRow, Error, FromRow, Row};
 use validator::{Validate, ValidationError};
 
 #[derive(Debug, Deserialize, Serialize, Validate)]
@@ -13,6 +14,23 @@ pub struct Reservation {
   pub date: NaiveDate,
   pub start_time: u32,
   pub end_time: u32,
+}
+
+impl FromRow<'_, SqliteRow> for Reservation {
+  fn from_row(row: &SqliteRow) -> Result<Self, Error> {
+    let seat_id_i64: i64 = row.try_get("seat_id")?;
+    let seat_id: u16 = seat_id_i64.try_into().map_err(|_| Error::RowNotFound)?;
+    let date = row.try_get("date")?;
+    let start_time = row.try_get("start_time")?;
+    let end_time = row.try_get("end_time")?;
+
+    Ok(Reservation {
+      seat_id,
+      date,
+      start_time,
+      end_time,
+    })
+  }
 }
 
 #[derive(Debug, Deserialize, Serialize, Validate)]

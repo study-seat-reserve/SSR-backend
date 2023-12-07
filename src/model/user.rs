@@ -1,6 +1,11 @@
 use regex::Regex;
-use rusqlite::types::{FromSql, FromSqlError, ValueRef};
 use serde::{Deserialize, Serialize};
+use sqlx::{
+  decode::Decode,
+  error::BoxDynError,
+  sqlite::{Sqlite, SqliteRow, SqliteTypeInfo, SqliteValueRef},
+  FromRow, Row, Type,
+};
 use std::{io::ErrorKind, str::FromStr};
 use validator::{Validate, ValidationError};
 
@@ -18,10 +23,22 @@ pub struct User {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct UserInfo {
   pub user_name: String,
-  pub password: String,
+  pub password_hash: String,
   pub email: String,
   pub user_role: UserRole,
   pub verified: bool,
+}
+
+impl FromRow<'_, SqliteRow> for UserInfo {
+  fn from_row(row: &SqliteRow) -> Result<Self, sqlx::Error> {
+    Ok(UserInfo {
+      user_name: row.try_get("user_name")?,
+      password_hash: row.try_get("password_hash")?,
+      email: row.try_get("email")?,
+      user_role: row.try_get("user_role")?,
+      verified: row.try_get("verified")?,
+    })
+  }
 }
 
 #[derive(Debug, Serialize, Deserialize, Validate)]
@@ -38,15 +55,33 @@ pub enum UserRole {
   Admin,
 }
 
-impl FromSql for UserRole {
-  fn column_result(value: ValueRef) -> Result<UserRole, FromSqlError> {
-    match value.as_str() {
-      Ok("RegularUser") => Ok(UserRole::RegularUser),
-      Ok("Admin") => Ok(UserRole::Admin),
-      _ => Err(FromSqlError::InvalidType),
+impl<'r> Decode<'r, Sqlite> for UserRole {
+  fn decode(value: SqliteValueRef<'r>) -> Result<Self, BoxDynError> {
+    let value = <&str as Decode<Sqlite>>::decode(value)?;
+
+    match value {
+      "RegularUser" => Ok(UserRole::RegularUser),
+      "Admin" => Ok(UserRole::Admin),
+      _ => Err("Invalid UserRole".into()),
     }
   }
 }
+
+impl Type<Sqlite> for UserRole {
+  fn type_info() -> SqliteTypeInfo {
+    <&str as Type<Sqlite>>::type_info()
+  }
+}
+
+// impl FromSql for UserRole {
+//   fn column_result(value: ValueRef) -> Result<UserRole, FromSqlError> {
+//     match value.as_str() {
+//       Ok("RegularUser") => Ok(UserRole::RegularUser),
+//       Ok("Admin") => Ok(UserRole::Admin),
+//       _ => Err(FromSqlError::InvalidType),
+//     }
+//   }
+// }
 
 impl ToString for UserRole {
   fn to_string(&self) -> String {
