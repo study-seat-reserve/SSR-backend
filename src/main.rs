@@ -76,7 +76,7 @@ async fn main() {
   let pool = SqlitePool::connect_lazy(&database_url).expect("Failed to create pool.");
   let pool_clone = pool.clone();
 
-  database::init_db(&pool_clone).await;
+  database::init::init_db(&pool_clone).await;
 
   tokio::spawn(async move {
     timer::start(&pool_clone).await;

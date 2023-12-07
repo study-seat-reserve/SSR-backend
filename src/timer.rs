@@ -79,7 +79,7 @@ pub async fn set_unavailable_timeslots(pool: &Pool<Sqlite>) {
       time_slots.push((220000, 240000));
     }
 
-    database::insert_unavailable_timeslots(pool, future_date, time_slots)
+    database::timeslot::insert_unavailable_timeslots(pool, future_date, time_slots)
       .await
       .expect("Failed to insert unavailable timeslots");
   }

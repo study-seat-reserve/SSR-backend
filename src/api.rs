@@ -24,7 +24,7 @@ pub async fn register(pool: &State<Pool<Sqlite>>, data: Json<user::User>) -> Res
   let password_hash = handle(hash(password, DEFAULT_COST), "Hashing password")?;
   let verification_token = Uuid::new_v4().to_string();
 
-  database::insert_new_user_info(
+  database::user::insert_new_user_info(
     pool.inner(),
     user_name,
     &password_hash,
@@ -70,7 +70,7 @@ pub async fn email_verify(
 ) -> Result<String, Status> {
   log::info!("Verifying email for token: {}", verification_token);
 
-  database::update_user_verified_by_token(pool.inner(), &verification_token).await?;
+  database::user::update_user_verified_by_token(pool.inner(), &verification_token).await?;
 
   log::info!(
     "Email verification completed for token: {}",
@@ -89,7 +89,7 @@ pub async fn login(
   handle_validator(creds.validate())?;
   log::info!("Processing the login request");
 
-  let user_info = database::get_user_info(pool.inner(), &creds.user_name).await?;
+  let user_info = database::user::get_user_info(pool.inner(), &creds.user_name).await?;
   let username = user_info.user_name.clone();
   let password_hash = &user_info.password_hash;
   let verified = user_info.verified;
@@ -131,7 +131,7 @@ pub async fn show_current_seats_status(pool: &State<Pool<Sqlite>>) -> Result<Str
   let now = get_now();
   let all_seats_status: seat::AllSeatsStatus;
 
-  if database::is_within_unavailable_timeslot(pool, date, now).await? {
+  if database::timeslot::is_within_unavailable_timeslot(pool, date, now).await? {
     log::warn!(
       "The date: {} time: {} is within an unavailable timeslot",
       date,
@@ -148,7 +148,7 @@ pub async fn show_current_seats_status(pool: &State<Pool<Sqlite>>) -> Result<Str
     }
     all_seats_status = seat::AllSeatsStatus { seats: seats_vec };
   } else {
-    all_seats_status = database::get_all_seats_status(pool.inner(), date, now).await?;
+    all_seats_status = database::seat::get_all_seats_status(pool.inner(), date, now).await?;
   }
 
   let json = handle(
@@ -181,7 +181,7 @@ pub async fn show_seats_status_by_time(
   validate_datetime(date, start_time, end_time)?;
 
   let all_seats_status =
-    database::get_seats_status_by_time(pool, date, start_time, end_time).await?;
+    database::seat::get_seats_status_by_time(pool, date, start_time, end_time).await?;
 
   let json = handle(
     serde_json::to_string(&all_seats_status),
@@ -206,7 +206,7 @@ pub async fn show_seat_reservations(
   validate_date(date)?;
   validate_seat_id(seat_id)?;
 
-  let timeslots = database::get_seat_reservations(pool, date, seat_id).await?;
+  let timeslots = database::seat::get_seat_reservations(pool, date, seat_id).await?;
 
   let json = handle(
     serde_json::to_string(&timeslots),
@@ -235,12 +235,14 @@ pub async fn reserve_seat(
 
   log::info!("Reserving a seat :{} for user: {}", seat_id, user_name);
 
-  if !database::is_seat_available(pool, seat_id).await? {
+  if !database::seat::is_seat_available(pool, seat_id).await? {
     log::warn!("The seat: {} is unavailable", seat_id);
     return Err(Status::UnprocessableEntity);
   }
 
-  if database::is_overlapping_with_unavailable_timeslot(pool, date, start_time, end_time).await? {
+  if database::timeslot::is_overlapping_with_unavailable_timeslot(pool, date, start_time, end_time)
+    .await?
+  {
     log::warn!(
       "The date: {} start_time: {} end_time: {} is overlapping unavailable time slot",
       date,
@@ -250,7 +252,8 @@ pub async fn reserve_seat(
     return Err(Status::Conflict);
   }
 
-  database::reserve_seat(pool, &user_name, seat_id, date, start_time, end_time).await?;
+  database::reservation::reserve_seat(pool, &user_name, seat_id, date, start_time, end_time)
+    .await?;
 
   log::info!(
     "Seat: {} reserved successfully for user: {}",
@@ -281,13 +284,25 @@ pub async fn update_reservation(
 
   log::info!("Updating reservation for user: {}", user_name);
 
-  if database::is_overlapping_with_unavailable_timeslot(pool, date, new_start_time, new_end_time)
-    .await?
+  if database::timeslot::is_overlapping_with_unavailable_timeslot(
+    pool,
+    date,
+    new_start_time,
+    new_end_time,
+  )
+  .await?
   {
     return Err(Status::Conflict);
   }
 
-  database::update_reservation_time(pool, &user_name, date, new_start_time, new_end_time).await?;
+  database::reservation::update_reservation_time(
+    pool,
+    &user_name,
+    date,
+    new_start_time,
+    new_end_time,
+  )
+  .await?;
 
   log::info!("Reservation for user: {} updated successfully", user_name);
 
@@ -312,7 +327,7 @@ pub async fn delete_reservation_time(
 
   log::info!("Deleting reservation for user: {}", user_name);
 
-  database::delete_reservation_time(pool, &user_name, date).await?;
+  database::reservation::delete_reservation_time(pool, &user_name, date).await?;
 
   log::info!("Reservation for user: {} deleted successfully", user_name);
 
@@ -329,15 +344,15 @@ pub async fn display_user_reservations(
 
   log::info!("Displaying the user's reservations");
 
-  let reservations = database::get_user_reservations(pool, &user_name).await?;
+  let reservations = database::reservation::get_user_reservations(pool, &user_name).await?;
 
   log::info!("Displaying the user's reservations successfully");
 
   Ok(Json(reservations))
 }
 
-#[post("/api/set_timeslots")]
-pub async fn set_unavailable_timeslots() {}
+// #[post("/api/set_timeslots")]
+// pub async fn set_unavailable_timeslots() {}
 /*
 管理者設定unavaliable time slot
 管理者設定座位avaliable
