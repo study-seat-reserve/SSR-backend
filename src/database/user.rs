@@ -4,22 +4,17 @@ use sqlx::{query, query_as, Pool, Sqlite};
 // 註冊
 pub async fn insert_new_user_info(
   pool: &Pool<Sqlite>,
-  user_name: &str,
-  password_hash: &str,
-  email: &str,
-  verification_token: &str,
+  user_info: user::UserInfo,
 ) -> Result<(), Status> {
   log::info!("Inserting new user information");
 
-  let user_role = user::UserRole::RegularUser.to_string();
-
   handle_sqlx(query("INSERT INTO Users (user_name, password_hash, email, user_role, verified, verification_token) VALUES (?1, ?2, ?3, ?4, ?5, ?6)")
-        .bind(user_name)
-        .bind(password_hash)
-        .bind(email)
-        .bind(user_role)
-        .bind(false)
-        .bind(verification_token)
+        .bind(user_info.user_name)
+        .bind(user_info.password_hash)
+        .bind(user_info.email)
+        .bind(user_info.user_role.to_string())
+        .bind(user_info.verified)
+        .bind(user_info.verification_token)
         .execute(pool)
         .await,
   "Inserting new user information")?;
@@ -31,7 +26,7 @@ pub async fn insert_new_user_info(
 pub async fn get_user_info(pool: &Pool<Sqlite>, user_name: &str) -> Result<user::UserInfo, Status> {
   let user_info = handle_sqlx(
     query_as::<_, user::UserInfo>(
-      "SELECT user_name, password_hash, email, user_role, verified
+      "SELECT user_name, password_hash, email, user_role, verified, verification_token
          FROM Users
          WHERE user_name = ?",
     )

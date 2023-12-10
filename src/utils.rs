@@ -1,6 +1,6 @@
 use crate::model::{constant::*, *};
 use chrono::{Duration, Local, NaiveDate, NaiveDateTime, NaiveTime, Timelike, Utc};
-use jsonwebtoken::{decode, encode, Algorithm, DecodingKey, EncodingKey, Header, Validation};
+use jsonwebtoken::{encode, Algorithm, EncodingKey, Header};
 use lettre::{
   message::Mailbox, transport::smtp::authentication::Credentials, Message, SmtpTransport, Transport,
 };
@@ -159,7 +159,7 @@ pub fn get_base_url() -> String {
   env::var("BASE_URL").expect("Failed to get base url")
 }
 
-pub fn send_verification_email(email: &str, url: &str) -> Result<(), Status> {
+pub fn send_verification_email(user_email: &str, verification_token: &str) -> Result<(), Status> {
   let email_address_str = env::var("EMAIL_ADDRESS").expect("Failed to get email address");
   let email_password = env::var("EMAIL_PASSWORD").expect("Failed to get email password");
   let email_domain = env::var("EMAIL_DOMAIN").expect("Failed to get email domain");
@@ -168,7 +168,13 @@ pub fn send_verification_email(email: &str, url: &str) -> Result<(), Status> {
     email_address_str.parse::<Mailbox>(),
     "Parsing email address",
   )?;
-  let user_email = handle(email.parse::<Mailbox>(), "Parsing user email")?;
+
+  let user_email = handle(user_email.parse::<Mailbox>(), "Parsing user email")?;
+  let url = format!(
+    "{}/api/verify?verification_token={}",
+    get_base_url(),
+    verification_token
+  );
 
   let email = handle(
     Message::builder()
@@ -196,16 +202,16 @@ pub fn send_verification_email(email: &str, url: &str) -> Result<(), Status> {
   Ok(())
 }
 
-pub fn create_token(userinfo: user::UserInfo) -> Result<String, Status> {
-  let expiration = Utc::now()
+pub fn create_userinfo_token(user_name: &str, user_role: user::UserRole) -> Result<String, Status> {
+  let exp = Utc::now()
     .checked_add_signed(Duration::hours(1)) // 1 小時後過期
     .expect("valid timestamp")
     .timestamp() as usize;
 
-  let claims = token::Claims {
-    user: userinfo.user_name,
-    role: userinfo.user_role,
-    exp: expiration,
+  let claim = token::UserInfoClaim {
+    user: user_name.to_string(),
+    role: user_role,
+    exp: exp,
   };
 
   let header = Header::new(Algorithm::HS256);
@@ -213,22 +219,42 @@ pub fn create_token(userinfo: user::UserInfo) -> Result<String, Status> {
 
   let encoding_key = EncodingKey::from_secret(key.as_ref());
 
-  let token = handle(encode(&header, &claims, &encoding_key), "Encoding JWT")?;
+  let token = handle(encode(&header, &claim, &encoding_key), "Encoding JWT")?;
 
   Ok(token)
 }
 
-pub fn verify_jwt(token: &str) -> Result<token::Claims, Status> {
+pub fn create_resend_verification_token(
+  email: &str,
+  verification_token: &str,
+  is_resend: bool,
+) -> Result<String, Status> {
+  let exp = Utc::now()
+    .checked_add_signed(Duration::hours(1)) // 1 小時後過期
+    .expect("valid timestamp")
+    .timestamp() as usize; // or u64
+
+  let mut expiration = 0;
+  if is_resend {
+    expiration = Utc::now()
+      .checked_add_signed(Duration::minutes(1))
+      .expect("valid timestamp")
+      .timestamp() as u64;
+  }
+
+  let claim = token::ResendVerificationClaim {
+    email: email.to_string(),
+    verification_token: verification_token.to_string(),
+    expiration: expiration,
+    exp: exp,
+  };
+
+  let header = Header::new(Algorithm::HS256);
   let key = env::var("SECRET_KEY").expect("Failed to get secret key");
 
-  let token = handle(
-    decode::<token::Claims>(
-      token,
-      &DecodingKey::from_secret(key.as_ref()),
-      &Validation::new(Algorithm::HS256),
-    ),
-    "Decoding JWT",
-  )?;
+  let encoding_key = EncodingKey::from_secret(key.as_ref());
 
-  Ok(token.claims)
+  let token = handle(encode(&header, &claim, &encoding_key), "Encoding JWT")?;
+
+  Ok(token)
 }

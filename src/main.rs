@@ -101,6 +101,7 @@ async fn main() {
     delete_reservation_time,
     display_user_reservations,
     email_verify,
+    resend_verification_email,
   ];
   let server = rocket::build()
     .register("/", catchers)

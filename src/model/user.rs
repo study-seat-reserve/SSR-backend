@@ -20,13 +20,14 @@ pub struct User {
   pub email: String,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct UserInfo {
   pub user_name: String,
   pub password_hash: String,
   pub email: String,
   pub user_role: UserRole,
   pub verified: bool,
+  pub verification_token: String,
 }
 
 impl FromRow<'_, SqliteRow> for UserInfo {
@@ -37,6 +38,7 @@ impl FromRow<'_, SqliteRow> for UserInfo {
       email: row.try_get("email")?,
       user_role: row.try_get("user_role")?,
       verified: row.try_get("verified")?,
+      verification_token: row.try_get("verification_token")?,
     })
   }
 }
@@ -49,7 +51,7 @@ pub struct LoginCreds {
   pub password: String,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub enum UserRole {
   RegularUser,
   Admin,
