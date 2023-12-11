@@ -1,5 +1,7 @@
+use super::validate_utils::validate_seat_id;
 use serde::{Deserialize, Serialize};
 use std::{io::ErrorKind, str::FromStr, string::ToString};
+use validator::Validate;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Seat {
@@ -24,6 +26,13 @@ pub enum Status {
   Available,
   Unavailable,
   Borrowed,
+}
+
+#[derive(Debug, Serialize, Deserialize, Validate)]
+pub struct SeatAvailabilityRequest {
+  #[validate(custom = "validate_seat_id")]
+  pub seat_id: u16,
+  pub available: bool,
 }
 
 impl ToString for Status {

@@ -51,7 +51,7 @@ pub struct LoginCreds {
   pub password: String,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub enum UserRole {
   RegularUser,
   Admin,

@@ -382,8 +382,48 @@ pub async fn display_user_reservations(
   Ok(Json(reservations))
 }
 
-// #[post("/api/set_timeslots")]
-// pub async fn set_unavailable_timeslots() {}
+#[post("/api/set_timeslots", format = "json", data = "<timeslot>")]
+pub async fn set_unavailable_timeslots(
+  pool: &State<Pool<Sqlite>>,
+  claims: token::UserInfoClaim,
+  timeslot: Json<timeslot::TimeSlot>,
+) -> Result<(), Status> {
+  handle_validator(timeslot.validate())?;
+
+  if claims.role != user::UserRole::Admin {
+    log::warn!("");
+    // return;
+  }
+
+  let user_name = claims.user;
+  log::info!("Handling registration for user: {}", user_name);
+
+  // database::insert_unavailable_timeslots()
+  Ok(())
+}
+
+#[post(
+  "/api/set_seat_availability",
+  format = "json",
+  data = "<seat_availability>"
+)]
+pub async fn set_seat_availability(
+  pool: &State<Pool<Sqlite>>,
+  claims: token::UserInfoClaim,
+  seat_availability: Json<seat::SeatAvailabilityRequest>,
+) -> Result<(), Status> {
+  if claims.role != user::UserRole::Admin {
+    log::warn!("");
+    // return;
+  }
+
+  let user_name = claims.user;
+  log::info!("Handling registration for user: {}", user_name);
+
+  // database::update_seat_availability()
+  Ok(())
+}
+
 /*
 管理者設定unavaliable time slot
 管理者設定座位avaliable
