@@ -10,7 +10,7 @@ use std::{io::ErrorKind, str::FromStr};
 use validator::{Validate, ValidationError};
 
 #[derive(Debug, Serialize, Deserialize, Validate)]
-pub struct User {
+pub struct RegisterRequest {
   #[validate(length(min = 1, max = 20), custom = "validate_username")]
   pub user_name: String,
   #[validate(length(min = 8, max = 20))]
@@ -30,6 +30,20 @@ pub struct UserInfo {
   pub verification_token: String,
 }
 
+#[derive(Debug, Serialize, Deserialize, Validate)]
+pub struct LoginRequest {
+  #[validate(length(min = 1, max = 20), custom = "validate_username")]
+  pub user_name: String,
+  #[validate(length(min = 8, max = 20))]
+  pub password: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+pub enum UserRole {
+  RegularUser,
+  Admin,
+}
+
 impl FromRow<'_, SqliteRow> for UserInfo {
   fn from_row(row: &SqliteRow) -> Result<Self, sqlx::Error> {
     Ok(UserInfo {
@@ -41,20 +55,6 @@ impl FromRow<'_, SqliteRow> for UserInfo {
       verification_token: row.try_get("verification_token")?,
     })
   }
-}
-
-#[derive(Debug, Serialize, Deserialize, Validate)]
-pub struct LoginCreds {
-  #[validate(length(min = 1, max = 20), custom = "validate_username")]
-  pub user_name: String,
-  #[validate(length(min = 8, max = 20))]
-  pub password: String,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
-pub enum UserRole {
-  RegularUser,
-  Admin,
 }
 
 impl<'r> Decode<'r, Sqlite> for UserRole {
@@ -74,16 +74,6 @@ impl Type<Sqlite> for UserRole {
     <&str as Type<Sqlite>>::type_info()
   }
 }
-
-// impl FromSql for UserRole {
-//   fn column_result(value: ValueRef) -> Result<UserRole, FromSqlError> {
-//     match value.as_str() {
-//       Ok("RegularUser") => Ok(UserRole::RegularUser),
-//       Ok("Admin") => Ok(UserRole::Admin),
-//       _ => Err(FromSqlError::InvalidType),
-//     }
-//   }
-// }
 
 impl ToString for UserRole {
   fn to_string(&self) -> String {

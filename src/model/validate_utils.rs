@@ -1,39 +1,34 @@
 use super::constant::*;
-use crate::utils::{get_now, get_today};
-use chrono::{Duration, NaiveDate};
-use validator::{Validate, ValidationError};
+use crate::utils::{get_now, get_today, timestamp_to_naive_datetime};
+use validator::ValidationError;
 
-pub fn validate_date(date: &NaiveDate) -> Result<(), ValidationError> {
-  let today = get_today();
-  let three_days_later = today + Duration::days(3);
+pub fn validate_datetime(start_time: i64, end_time: i64) -> Result<(), ValidationError> {
+  on_the_same_day(start_time, end_time)?;
 
-  if *date < today || *date > three_days_later {
-    return Err(ValidationError::new("Invalid reservation date"));
-  }
+  let current_timestamp = get_now().timestamp();
 
-  Ok(())
-}
-
-pub fn validate_datetime(
-  date: NaiveDate,
-  start_time: u32,
-  end_time: u32,
-) -> Result<(), ValidationError> {
-  let today = get_today();
-  let date: NaiveDate = date;
-  let start_time: u32 = start_time;
-  let end_time: u32 = end_time;
-  let now = get_now();
-
-  if date == today && start_time < now {
+  if start_time < current_timestamp {
     return Err(ValidationError::new(
-      "Invalid reservation start time: start time < current time",
+      "Invalid reservation: Start time is greater than the current time",
     ));
   }
 
   if end_time < start_time {
     return Err(ValidationError::new(
-      "Invalid reservation start time: start time > end time",
+      "Invalid reservation: start time: Start time is greater than end time",
+    ));
+  }
+
+  Ok(())
+}
+
+pub fn on_the_same_day(time1: i64, time2: i64) -> Result<(), ValidationError> {
+  let datetime1 = timestamp_to_naive_datetime(time1).expect("Invalid start_time timestamp");
+  let datetime2 = timestamp_to_naive_datetime(time2).expect("Invalid end_time timestamp");
+
+  if datetime1.date() != datetime2.date() {
+    return Err(ValidationError::new(
+      "Invalid reservation: The two dates are not on the same day",
     ));
   }
 

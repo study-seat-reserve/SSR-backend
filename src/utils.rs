@@ -1,5 +1,5 @@
-use crate::model::{constant::*, *};
-use chrono::{Duration, Local, NaiveDate, NaiveDateTime, NaiveTime, Timelike, Utc};
+use crate::model::*;
+use chrono::{Duration, FixedOffset, Local, NaiveDate, NaiveDateTime, NaiveTime, TimeZone, Utc};
 use jsonwebtoken::{encode, Algorithm, EncodingKey, Header};
 use lettre::{
   message::Mailbox, transport::smtp::authentication::Credentials, Message, SmtpTransport, Transport,
@@ -77,76 +77,80 @@ pub fn get_today() -> NaiveDate {
   Local::now().date_naive()
 }
 
-pub fn get_now() -> u32 {
-  parse_time(Local::now().naive_local().time()).expect("Parse time 'now' error!")
-}
-
-pub fn get_datetime() -> NaiveDateTime {
+pub fn get_now() -> NaiveDateTime {
   Local::now().naive_local()
 }
 
-pub fn get_tomorrow_midnight() -> NaiveDateTime {
-  let now = Local::now().date_naive().and_hms_opt(0, 0, 0).unwrap();
-  let get_tomorrow_midnight = now + Duration::days(1);
-  get_tomorrow_midnight
+pub fn time_to_string(timestamp: i64) -> Result<String, Status> {
+  let naive_datetime = NaiveDateTime::from_timestamp_opt(timestamp, 0).ok_or_else(|| {
+    log::error!("Invalid timestamp");
+    Status::InternalServerError
+  })?;
+
+  Ok(naive_datetime.format("%Y-%m-%d %H:%M:%S").to_string())
 }
 
-pub fn get_last_week() -> NaiveDate {
-  let now = Local::now().date_naive();
-  let seven_days_ago = now - Duration::days(7);
-  seven_days_ago
+pub fn naive_date_to_timestamp(
+  date: NaiveDate,
+  hour: u32,
+  min: u32,
+  sec: u32,
+) -> Result<i64, Status> {
+  let time = NaiveTime::from_hms_opt(hour, min, sec).ok_or_else(|| {
+    log::error!("Invalid NaiveTime");
+    Status::InternalServerError
+  })?;
+
+  let datetime = NaiveDateTime::new(date, time) - chrono::Duration::hours(8);
+  let timestamp = datetime.timestamp();
+
+  Ok(timestamp)
 }
 
-pub fn date_from_string(date: &str) -> Result<NaiveDate, Status> {
-  handle(
-    NaiveDate::parse_from_str(date, "%Y-%m-%d"),
-    &format!("Parsing date from str '{}'", date),
-  )
+pub fn naive_datetime_to_timestamp(datetime: NaiveDateTime) -> Result<i64, Status> {
+  let datetime = datetime - chrono::Duration::hours(8);
+  let timestamp = datetime.timestamp();
+
+  Ok(timestamp)
 }
 
-pub fn parse_time(time: NaiveTime) -> Result<u32, Status> {
-  let time_string = format!("{:02}{:02}{:02}", time.hour(), time.minute(), time.second());
-  log::debug!("Parsing time {:?} to string: {}", time, time_string);
+pub fn timestamp_to_naive_datetime(timestamp: i64) -> Result<NaiveDateTime, Status> {
+  let offset = FixedOffset::east_opt(8 * 3600).ok_or_else(|| {
+    log::error!("Invalid offset");
+    Status::InternalServerError
+  })?;
 
-  handle(time_string.parse::<u32>(), "Parsing time")
+  let datetime = Utc.timestamp_opt(timestamp, 0).single().ok_or_else(|| {
+    log::error!("Invalid timestamp");
+    Status::InternalServerError
+  })?;
+
+  let datetime_local = datetime.with_timezone(&offset).naive_local();
+
+  Ok(datetime_local)
 }
 
 pub fn validate_seat_id(seat_id: u16) -> Result<(), Status> {
-  if seat_id < 1 || seat_id > NUMBER_OF_SEATS {
-    log::error!("Invalid seat_id Error: Seat id out of range");
-    return Err(Status::UnprocessableEntity);
-  }
+  validate_utils::validate_seat_id(seat_id).map_err(|e| {
+    let message = e.code.as_ref();
+    log::error!("seat_id: {}, Failed with error: {}", seat_id, message);
+    Status::UnprocessableEntity
+  })?;
 
   Ok(())
 }
 
-pub fn validate_date(date: NaiveDate) -> Result<(), Status> {
-  let today = get_today();
-  let three_days_later = today + Duration::days(3);
-
-  if date < today || date > three_days_later {
-    log::error!("Invalid date Error: Invalid reservation date");
-    return Err(Status::UnprocessableEntity);
-  }
-
-  Ok(())
-}
-
-pub fn validate_datetime(date: NaiveDate, start_time: u32, end_time: u32) -> Result<(), Status> {
-  let today = get_today();
-  let now = get_now();
-
-  validate_date(date)?;
-
-  if date == today && start_time < now {
-    log::error!("Invalid start_time: start_time < current time");
-    return Err(Status::UnprocessableEntity);
-  }
-
-  if end_time < start_time {
-    log::error!("Invalid start_time: start time > end time");
-    return Err(Status::UnprocessableEntity);
-  }
+pub fn validate_datetime(start_time: i64, end_time: i64) -> Result<(), Status> {
+  validate_utils::validate_datetime(start_time, end_time).map_err(|e| {
+    let message = e.code.as_ref();
+    log::error!(
+      "start_time: {}, end_time: {}, Failed with error: {}",
+      start_time,
+      end_time,
+      message
+    );
+    Status::UnprocessableEntity
+  })?;
 
   Ok(())
 }
@@ -239,7 +243,7 @@ pub fn create_resend_verification_token(
     expiration = Utc::now()
       .checked_add_signed(Duration::minutes(1))
       .expect("valid timestamp")
-      .timestamp() as u64;
+      .timestamp() as i64;
   }
 
   let claim = token::ResendVerificationClaim {

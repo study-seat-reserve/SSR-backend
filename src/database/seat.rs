@@ -1,13 +1,15 @@
 use crate::{model::*, utils::*};
-use chrono::NaiveDate;
 use sqlx::{query_scalar, Pool, Sqlite};
 
 // 查詢所有位置在特定時間點狀態
 pub async fn get_all_seats_status(
   pool: &Pool<Sqlite>,
-  date: NaiveDate,
-  time: u32,
+  time: i64,
 ) -> Result<seat::AllSeatsStatus, Status> {
+  /*
+  查詢所有位置在特定時間點狀態
+  */
+
   let sql = "
           SELECT 
               Seats.seat_id,
@@ -20,14 +22,13 @@ pub async fn get_all_seats_status(
               Seats
           LEFT JOIN Reservations ON 
               Seats.seat_id = Reservations.seat_id AND
-              Reservations.date = ? AND
               Reservations.start_time <= ? AND
               Reservations.end_time > ?
       ";
 
-  let result = handle_sqlx(
+  // 取得每個座位的狀態，回傳為vector包含(座位號碼, 狀態)
+  let result: Vec<(u16, String)> = handle_sqlx(
     sqlx::query_as::<_, (u16, String)>(sql)
-      .bind(date)
       .bind(time)
       .bind(time)
       .fetch_all(pool)
@@ -37,6 +38,7 @@ pub async fn get_all_seats_status(
 
   let mut seats = Vec::new();
 
+  // 將狀態由String轉換為seat::Status
   for (seat_id, status_str) in result {
     let status = match status_str.as_str() {
       "Available" => seat::Status::Available,
@@ -47,17 +49,20 @@ pub async fn get_all_seats_status(
     seats.push(seat::SeatStatus { seat_id, status });
   }
 
+  // 建立seat::AllSeatsStatus回傳
   let all_seats_status = seat::AllSeatsStatus { seats: seats };
 
   Ok(all_seats_status)
 }
 
-pub async fn get_seats_status_by_time(
+pub async fn get_seats_status_in_specific_timeslots(
   pool: &Pool<Sqlite>,
-  date: NaiveDate,
-  start_time: u32,
-  end_time: u32,
+  start_time: i64,
+  end_time: i64,
 ) -> Result<seat::AllSeatsStatus, Status> {
+  /*
+  查詢特定時間段中位置是否被借用
+   */
   let sql = "
         SELECT DISTINCT 
             Seats.seat_id,
@@ -70,13 +75,11 @@ pub async fn get_seats_status_by_time(
             Seats
         LEFT JOIN Reservations ON 
             Seats.seat_id = Reservations.seat_id AND
-            Reservations.date = ? AND
             (MAX(?, start_time) < MIN(?, end_time))
     ";
 
-  let result = handle_sqlx(
+  let result: Vec<(u16, String)> = handle_sqlx(
     sqlx::query_as::<_, (u16, String)>(sql)
-      .bind(date)
       .bind(start_time)
       .bind(end_time)
       .fetch_all(pool)
@@ -104,22 +107,24 @@ pub async fn get_seats_status_by_time(
 // 查詢特定位置狀態
 pub async fn get_seat_reservations(
   pool: &Pool<Sqlite>,
-  date: NaiveDate,
+  start_time: i64,
+  end_time: i64,
   seat_id: u16,
-) -> Result<Vec<(u32, u32)>, Status> {
+) -> Result<Vec<(i64, i64)>, Status> {
   let sql = "
         SELECT
             start_time, end_time
         FROM 
             Reservations
         WHERE
-            date = ? AND seat_id = ?
+            seat_id = ? AND start_time >= ? AND end_time <= ?
     ";
 
-  let timeslots = handle_sqlx(
-    sqlx::query_as::<_, (u32, u32)>(sql)
-      .bind(date)
+  let timeslots: Vec<(i64, i64)> = handle_sqlx(
+    sqlx::query_as::<_, (i64, i64)>(sql)
       .bind(seat_id)
+      .bind(start_time)
+      .bind(end_time)
       .fetch_all(pool)
       .await,
     "Selecting reservations for a seat",

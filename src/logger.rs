@@ -1,5 +1,5 @@
-use crate::utils::*;
 use ansi_term::Colour;
+use chrono::Local;
 use env_logger::Target;
 use log::{Level, LevelFilter};
 use regex;
@@ -19,7 +19,7 @@ pub fn init_logger(level: LevelFilter) {
     fs::create_dir_all(&path).expect("Failed to create logfiles");
   }
 
-  let now = get_today();
+  let now = Local::now().date_naive();
   let file_name = format!("{}/logfiles/{}.txt", root, now);
 
   let file = OpenOptions::new()
@@ -44,7 +44,7 @@ pub fn init_logger(level: LevelFilter) {
 
       let message = format!(
         "[{}] [{}] {}",
-        get_datetime().format("%Y-%m-%d %H:%M:%S%.3f"),
+        Local::now().naive_local().format("%Y-%m-%d %H:%M:%S%.3f"),
         level_style,
         record.args()
       );
@@ -63,3 +63,4 @@ fn remove_ansi_escape_codes(s: &str) -> String {
     .replace_all(s, "")
     .to_string()
 }
+

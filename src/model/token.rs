@@ -21,7 +21,7 @@ pub struct UserInfoClaim {
 pub struct ResendVerificationClaim {
   pub email: String,
   pub verification_token: String,
-  pub expiration: u64,
+  pub expiration: i64,
   pub exp: usize,
 }
 
@@ -51,7 +51,6 @@ impl<'r> FromRequest<'r> for UserInfoClaim {
     match headers {
       Some(header) => {
         let token = header.replace("Bearer ", "");
-        log::debug!("token: {:?}", token);
 
         match Self::verify_jwt(&token) {
           Ok(claims) => Outcome::Success(claims),
@@ -89,7 +88,6 @@ impl<'r> FromRequest<'r> for ResendVerificationClaim {
     match headers {
       Some(header) => {
         let token = header.replace("Bearer ", "");
-        log::debug!("token: {:?}", token);
 
         match Self::verify_jwt(&token) {
           Ok(claims) => Outcome::Success(claims),

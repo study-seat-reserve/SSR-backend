@@ -16,8 +16,6 @@ use rocket::{
   routes, {Request, Response},
 };
 
-use sqlx::SqlitePool;
-
 pub struct CORS;
 
 #[rocket::async_trait]
@@ -73,9 +71,21 @@ async fn main() {
   logger::init_logger(log::LevelFilter::Info);
 
   let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
-  let pool = SqlitePool::connect_lazy(&database_url).expect("Failed to create pool.");
+  // let pool = SqlitePool::connect_lazy(&database_url).expect("Failed to create pool.");
+
+  let pool = sqlx::pool::PoolOptions::new()
+    .max_lifetime(None)
+    .idle_timeout(None)
+    .connect(&database_url)
+    .await
+    .expect("Failed to create pool");
+
+  // let pool = SqlitePool::connect(&database_url)
+  //   .await
+  //   .expect("Failed to create pool");
   let pool_clone = pool.clone();
 
+  // database::init::clear_table(&pool).await;
   database::init::init_db(&pool_clone).await;
 
   tokio::spawn(async move {
@@ -95,7 +105,7 @@ async fn main() {
     login,
     show_current_seats_status,
     reserve_seat,
-    show_seats_status_by_time,
+    show_seats_status_in_specific_timeslots,
     show_seat_reservations,
     update_reservation,
     delete_reservation_time,

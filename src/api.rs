@@ -5,7 +5,6 @@ use crate::{
 };
 
 use bcrypt::{hash, verify, DEFAULT_COST};
-use chrono::Utc;
 use rocket::{get, http::Status, post, serde::json::Json, State};
 use sqlx::{Pool, Sqlite};
 use uuid::Uuid;
@@ -15,14 +14,14 @@ use validator::Validate;
 #[post("/api/register", format = "json", data = "<user>")]
 pub async fn register(
   pool: &State<Pool<Sqlite>>,
-  user: Json<user::User>,
+  user: Json<user::RegisterRequest>,
 ) -> Result<String, Status> {
   handle_validator(user.validate())?;
 
-  let user_data: user::User = user.into_inner();
-  let user_name = user_data.user_name;
-  let password = user_data.password;
-  let email = user_data.email;
+  let data: user::RegisterRequest = user.into_inner();
+  let user_name = data.user_name;
+  let password = data.password;
+  let email = data.email;
 
   log::info!("Handling registration for user: {}", user_name);
 
@@ -61,18 +60,18 @@ pub async fn resend_verification_email(
   let email = claims.email;
   let verification_token = claims.verification_token;
   let expiration = claims.expiration;
-  let now = Utc::now().timestamp() as u64;
+  let now: i64 = get_now().timestamp();
 
-  println!("now: {}, expiration: {}", now, expiration);
-
-  // 檢查是否可以重發驗證郵件
+  // 超過規定時間才可以重發驗證郵件
   if now <= expiration {
     log::warn!("Not yet reached the time limit for resending verification email, request denied");
     return Err(Status::BadRequest);
   }
 
+  // 重發驗證信
   send_verification_email(&email, &verification_token)?;
 
+  // 重新生成JWT token(is_resend設定為true) -> 重新計算重發驗證信的冷卻時間
   let token = create_resend_verification_token(&email, &verification_token, true)
     .map_err(|_| Status::InternalServerError)?;
 
@@ -101,7 +100,7 @@ pub async fn email_verify(
 #[post("/api/login", data = "<creds>")]
 pub async fn login(
   pool: &State<Pool<Sqlite>>,
-  creds: Json<user::LoginCreds>,
+  creds: Json<user::LoginRequest>,
 ) -> Result<String, Status> {
   handle_validator(creds.validate())?;
   let user_info = database::user::get_user_info(pool.inner(), &creds.user_name).await?;
@@ -134,26 +133,21 @@ pub async fn login(
 
 // 查詢當前所有位置狀態
 /*
-如果now在unavailable timeslot中回傳
-Unavailable
-否則若是在Reservations中回傳
-Borrowed
-否則是
-Available
+如果座位(Seats)不可用，則該座位的狀態為Unavailable
+如果特定時間被包含在某筆預約中，則則該座位的狀態為Borrowed
+否則為Available
 */
 #[get("/api/show_status")]
 pub async fn show_current_seats_status(pool: &State<Pool<Sqlite>>) -> Result<String, Status> {
   log::info!("Show current seats status");
 
-  let date = get_today();
-  let now = get_now();
+  let now: i64 = get_now().timestamp();
   let all_seats_status: seat::AllSeatsStatus;
 
-  if database::timeslot::is_within_unavailable_timeslot(pool.inner(), date, now).await? {
+  if database::timeslot::is_within_unavailable_timeslot(pool.inner(), now).await? {
     log::warn!(
-      "The date: {} time: {} is within an unavailable timeslot",
-      date,
-      now
+      "The time: {} is within an unavailable timeslot",
+      time_to_string(now)?
     );
 
     let mut seats_vec = Vec::<seat::SeatStatus>::new();
@@ -166,7 +160,7 @@ pub async fn show_current_seats_status(pool: &State<Pool<Sqlite>>) -> Result<Str
     }
     all_seats_status = seat::AllSeatsStatus { seats: seats_vec };
   } else {
-    all_seats_status = database::seat::get_all_seats_status(pool.inner(), date, now).await?;
+    all_seats_status = database::seat::get_all_seats_status(pool.inner(), now).await?;
   }
 
   let json = handle(
@@ -186,20 +180,18 @@ Borrowed
 否則回傳
 Available
 */
-#[get("/api/show_status/<date>/<start_time>/<end_time>")]
-pub async fn show_seats_status_by_time(
+#[get("/api/show_status/<start_time>/<end_time>")]
+pub async fn show_seats_status_in_specific_timeslots(
   pool: &State<Pool<Sqlite>>,
-  date: &str,
-  start_time: u32,
-  end_time: u32,
+  start_time: i64,
+  end_time: i64,
 ) -> Result<String, Status> {
   log::info!("Show seats status by time");
-
-  let date = date_from_string(date)?;
-  validate_datetime(date, start_time, end_time)?;
+  validate_datetime(start_time, end_time)?;
 
   let all_seats_status =
-    database::seat::get_seats_status_by_time(pool.inner(), date, start_time, end_time).await?;
+    database::seat::get_seats_status_in_specific_timeslots(pool.inner(), start_time, end_time)
+      .await?;
 
   let json = handle(
     serde_json::to_string(&all_seats_status),
@@ -212,19 +204,19 @@ pub async fn show_seats_status_by_time(
 }
 
 // 查詢當前特定位置預約狀態
-#[get("/api/show_reservations/<date>/<seat_id>")]
+#[get("/api/show_reservations/<seat_id>/<start_time>/<end_time>")]
 pub async fn show_seat_reservations(
   pool: &State<Pool<Sqlite>>,
-  date: &str,
   seat_id: u16,
+  start_time: i64,
+  end_time: i64,
 ) -> Result<String, Status> {
   log::info!("Show reservations of seat: {}", seat_id);
 
-  let date = date_from_string(date)?;
-  validate_date(date)?;
   validate_seat_id(seat_id)?;
 
-  let timeslots = database::seat::get_seat_reservations(pool.inner(), date, seat_id).await?;
+  let timeslots =
+    database::seat::get_seat_reservations(pool.inner(), start_time, end_time, seat_id).await?;
 
   let json = handle(
     serde_json::to_string(&timeslots),
@@ -237,54 +229,44 @@ pub async fn show_seat_reservations(
 }
 
 // 預約座位
-#[post("/api/reserve", format = "json", data = "<reservation>")]
+#[post("/api/reserve", format = "json", data = "<insert_reservation>")]
 pub async fn reserve_seat(
   pool: &State<Pool<Sqlite>>,
   claims: token::UserInfoClaim,
-  reservation: Json<reservation::Reservation>,
+  insert_reservation: Json<reservation::InsertReservationRequest>,
 ) -> Result<(), Status> {
-  handle_validator(reservation.validate())?;
+  handle_validator(insert_reservation.validate())?;
 
-  let reservation_data: reservation::Reservation = reservation.into_inner();
-  let seat_id = reservation_data.seat_id;
-  let date = reservation_data.date;
-  let start_time = reservation_data.start_time;
-  let end_time = reservation_data.end_time;
+  let data: reservation::InsertReservationRequest = insert_reservation.into_inner();
+  let seat_id = data.seat_id;
+  let start_time = data.start_time;
+  let end_time = data.end_time;
   let user_name = claims.user;
 
   log::info!("Reserving a seat :{} for user: {}", seat_id, user_name);
 
   if !database::seat::is_seat_available(pool.inner(), seat_id).await? {
     log::warn!("The seat: {} is unavailable", seat_id);
-    return Err(Status::UnprocessableEntity);
+    return Err(Status::BadRequest);
   }
 
   if database::timeslot::is_overlapping_with_unavailable_timeslot(
     pool.inner(),
-    date,
     start_time,
     end_time,
   )
   .await?
   {
     log::warn!(
-      "The date: {} start_time: {} end_time: {} is overlapping unavailable time slot",
-      date,
+      "The start_time: {} end_time: {} is overlapping unavailable time slot",
       start_time,
       end_time
     );
     return Err(Status::Conflict);
   }
 
-  database::reservation::reserve_seat(
-    pool.inner(),
-    &user_name,
-    seat_id,
-    date,
-    start_time,
-    end_time,
-  )
-  .await?;
+  database::reservation::reserve_seat(pool.inner(), &user_name, seat_id, start_time, end_time)
+    .await?;
 
   log::info!(
     "Seat: {} reserved successfully for user: {}",
@@ -304,20 +286,21 @@ pub async fn reserve_seat(
 pub async fn update_reservation(
   pool: &State<Pool<Sqlite>>,
   claims: token::UserInfoClaim,
-  update_reservation: Json<reservation::UpdateReservation>,
+  update_reservation: Json<reservation::UpdateReservationRequest>,
 ) -> Result<(), Status> {
   handle_validator(update_reservation.validate())?;
-  let update_data: reservation::UpdateReservation = update_reservation.into_inner();
-  let date = update_data.date;
-  let new_start_time = update_data.new_start_time;
-  let new_end_time = update_data.new_end_time;
+
+  let data: reservation::UpdateReservationRequest = update_reservation.into_inner();
+  let start_time = data.start_time;
+  let end_time = data.end_time;
+  let new_start_time = data.new_start_time;
+  let new_end_time = data.new_end_time;
   let user_name = claims.user;
 
   log::info!("Updating reservation for user: {}", user_name);
 
   if database::timeslot::is_overlapping_with_unavailable_timeslot(
     pool.inner(),
-    date,
     new_start_time,
     new_end_time,
   )
@@ -329,7 +312,8 @@ pub async fn update_reservation(
   database::reservation::update_reservation_time(
     pool.inner(),
     &user_name,
-    date,
+    start_time,
+    end_time,
     new_start_time,
     new_end_time,
   )
@@ -349,16 +333,19 @@ pub async fn update_reservation(
 pub async fn delete_reservation_time(
   pool: &State<Pool<Sqlite>>,
   claims: token::UserInfoClaim,
-  delete_reservation: Json<reservation::DeleteReservation>,
+  delete_reservation: Json<reservation::DeleteReservationRequest>,
 ) -> Result<(), Status> {
   handle_validator(delete_reservation.validate())?;
-  let delete_data: reservation::DeleteReservation = delete_reservation.into_inner();
-  let date = delete_data.date;
+
+  let data: reservation::DeleteReservationRequest = delete_reservation.into_inner();
+  let start_time = data.start_time;
+  let end_time = data.end_time;
   let user_name = claims.user;
 
   log::info!("Deleting reservation for user: {}", user_name);
 
-  database::reservation::delete_reservation_time(pool.inner(), &user_name, date).await?;
+  database::reservation::delete_reservation_time(pool.inner(), &user_name, start_time, end_time)
+    .await?;
 
   log::info!("Reservation for user: {} deleted successfully", user_name);
 

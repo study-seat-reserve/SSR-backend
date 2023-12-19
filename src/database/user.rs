@@ -60,27 +60,3 @@ pub async fn update_user_verified_by_token(
 
   Ok(())
 }
-
-pub async fn check_if_user_name_exists(
-  pool: &Pool<Sqlite>,
-  user_name: &str,
-) -> Result<bool, Status> {
-  let result: Option<(i64,)> = handle_sqlx(
-    query_as::<_, (i64,)>("SELECT COUNT(*) FROM Users WHERE user_name = ?")
-      .bind(user_name)
-      .fetch_optional(pool)
-      .await,
-    "Querying select operation",
-  )?;
-
-  match result {
-    Some(_) => {
-      log::debug!("username: {} exists", user_name);
-      Ok(true)
-    }
-    None => {
-      log::debug!("username: {} does not exist", user_name);
-      Ok(false)
-    }
-  }
-}
