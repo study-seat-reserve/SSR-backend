@@ -1,3 +1,5 @@
+use chrono::NaiveDate;
+
 use super::common::*;
 
 // 預約座位
@@ -28,11 +30,15 @@ pub async fn reserve_seat(
     .await,
     "Selecting overlapping reservations",
   )?;
-  let is_overlapping: bool = result.map_or(false, |count| count != 0);
+  let overlapping: bool = result.map_or(false, |count| count != 0);
 
   // 如果重疊
-  if is_overlapping {
-    log::warn!("Found overlapping reservation");
+  if overlapping {
+    log::warn!(
+      "The start_time: {} end_time: {} is overlapping with user's reservation",
+      start_time,
+      end_time
+    );
 
     // rollback
     handle_sqlx(tx.rollback().await, "Rolling back")?;
@@ -96,10 +102,10 @@ pub async fn update_reservation_time(
     .await,
     "Checking for overlapping reservations",
   )?;
-  let is_overlapping: bool = result.map_or(false, |count| count != 0);
+  let overlapping: bool = result.map_or(false, |count| count != 0);
 
   // 如果重疊
-  if is_overlapping {
+  if overlapping {
     log::warn!("Found overlapping reservation");
 
     // rollback
@@ -217,29 +223,28 @@ pub async fn get_user_reservations(
   Ok(reservations)
 }
 
-pub async fn is_overlapping_with_user_reservation(
+pub async fn check_unfinished_reservations(
   pool: &Pool<Sqlite>,
   user_name: &str,
-  start_time: i64,
-  end_time: i64,
+  date: NaiveDate,
 ) -> Result<bool, Status> {
   let result = handle_sqlx(
     query_scalar!(
       "SELECT EXISTS(
         SELECT 1 FROM Reservations
         WHERE user_name = ?
-        AND (MAX(?, start_time) < MIN(?, end_time))
+        AND ? = date(start_time)
+        AND datetime('now', '+8 hours') < end_time
       )",
       user_name,
-      start_time,
-      end_time
+      date,
     )
     .fetch_one(pool)
     .await,
-    "Selecting overlapping unavailable time slots",
+    "Selecting unfinished reservations",
   )?;
 
-  let is_overlapping: bool = result.map_or(false, |count| count != 0);
+  let has_unfinished_reservation: bool = result.map_or(false, |count| count != 0);
 
-  Ok(is_overlapping)
+  Ok(has_unfinished_reservation)
 }

@@ -20,9 +20,9 @@ pub async fn is_overlapping_with_unavailable_timeslot(
     "Selecting overlapping unavailable time slots",
   )?;
 
-  let is_overlapping: bool = result.map_or(false, |count| count != 0);
+  let overlapping: bool = result.map_or(false, |count| count != 0);
 
-  Ok(is_overlapping)
+  Ok(overlapping)
 }
 
 pub async fn is_within_unavailable_timeslot(

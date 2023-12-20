@@ -258,16 +258,19 @@ pub async fn reserve_seat(
   .await?
   {
     log::warn!(
-      "The start_time: {} end_time: {} is overlapping unavailable time slot",
+      "The start_time: {} end_time: {} is overlapping unavailable timeslot",
       start_time,
       end_time
     );
-    return Err(Status::Conflict);
+    return Err(Status::BadRequest);
   }
 
-  /*
-  判斷當天否有還沒完成的預約
-   */
+  let date = timestamp_to_naive_datetime(start_time)?.date();
+
+  if database::reservation::check_unfinished_reservations(pool.inner(), &user_name, date).await? {
+    log::warn!("Found ongoing reservation not yet completed");
+    return Err(Status::BadRequest);
+  }
 
   database::reservation::reserve_seat(pool.inner(), &user_name, seat_id, start_time, end_time)
     .await?;

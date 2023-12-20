@@ -150,7 +150,7 @@ async fn init_unavailable_timeslots(pool: &Pool<Sqlite>) {
   }
 
   for (start_time, end_time) in time_slots.into_iter() {
-    let is_overlapping = is_overlapping_with_unavailable_timeslot(&pool, start_time, end_time)
+    let overlapping = is_overlapping_with_unavailable_timeslot(&pool, start_time, end_time)
       .await
       .unwrap_or_else(|e| {
         log::error!(
@@ -163,7 +163,7 @@ async fn init_unavailable_timeslots(pool: &Pool<Sqlite>) {
         );
       });
 
-    if !is_overlapping {
+    if !overlapping {
       insert_unavailable_timeslot(pool, start_time, end_time)
         .await
         .unwrap_or_else(|e| {
