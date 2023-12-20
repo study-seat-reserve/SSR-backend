@@ -8,9 +8,10 @@ pub async fn is_overlapping_with_unavailable_timeslot(
   let result = handle_sqlx(
     query_scalar!(
       "SELECT EXISTS(
-              SELECT 1 FROM UnavailableTimeSlots
-              WHERE (MAX(?, start_time) < MIN(?, end_time))
-          )",
+        SELECT 1 FROM UnavailableTimeSlots
+        WHERE 
+          (MAX(datetime(?, 'unixepoch', '+8 hours'), start_time) < MIN(datetime(?, 'unixepoch', '+8 hours'), end_time))
+      )",
       start_time,
       end_time
     )
@@ -31,9 +32,11 @@ pub async fn is_within_unavailable_timeslot(
   let result = handle_sqlx(
     query_scalar!(
       "SELECT EXISTS(
-              SELECT 1 FROM UnavailableTimeSlots
-              WHERE start_time <= ? AND end_time > ?
-          )",
+        SELECT 1 FROM UnavailableTimeSlots
+        WHERE 
+          start_time <= datetime(?, 'unixepoch', '+8 hours') AND 
+          end_time > datetime(?, 'unixepoch', '+8 hours')
+      )",
       time,
       time
     )
@@ -54,8 +57,14 @@ pub async fn insert_unavailable_timeslot(
 ) -> Result<(), Status> {
   let mut tx = handle_sqlx(pool.begin().await, "Starting new transaction")?;
 
+  let sql = "
+    INSERT INTO UnavailableTimeSlots 
+      (start_time, end_time) 
+    VALUES 
+      (datetime(?, 'unixepoch', '+8 hours'), datetime(?, 'unixepoch', '+8 hours'))";
+
   handle_sqlx(
-    query("INSERT INTO UnavailableTimeSlots (start_time, end_time) VALUES (?, ?)")
+    query(sql)
       .bind(start_time)
       .bind(end_time)
       .execute(&mut *tx)

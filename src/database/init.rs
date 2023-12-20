@@ -43,8 +43,8 @@ pub async fn init_db(pool: &Pool<Sqlite>) {
     "CREATE TABLE IF NOT EXISTS Reservations (
             user_name TEXT NOT NULL,
             seat_id INTEGER NOT NULL,
-            start_time INTEGER NOT NULL,
-            end_time INTEGER NOT NULL,
+            start_time TEXT NOT NULL,
+            end_time TEXT NOT NULL,
             PRIMARY KEY (user_name, start_time, end_time),
             FOREIGN KEY(user_name) REFERENCES Users(user_name),
             FOREIGN KEY(seat_id) REFERENCES Seats(seat_id)
@@ -59,8 +59,8 @@ pub async fn init_db(pool: &Pool<Sqlite>) {
 
   sqlx::query(
     "CREATE TABLE IF NOT EXISTS UnavailableTimeSlots (
-      start_time INTEGER NOT NULL,
-      end_time INTEGER NOT NULL,
+      start_time TEXT NOT NULL,
+      end_time TEXT NOT NULL,
       PRIMARY KEY (start_time, end_time)
     )",
   )

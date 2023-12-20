@@ -10,20 +10,19 @@ pub async fn get_all_seats_status(
   */
 
   let sql = "
-          SELECT 
-              Seats.seat_id,
-              CASE
-                  WHEN Seats.available = 0 THEN 'Unavailable'
-                  WHEN Reservations.seat_id IS NULL THEN 'Available'
-                  ELSE 'Borrowed'
-              END as status
-          FROM 
-              Seats
-          LEFT JOIN Reservations ON 
-              Seats.seat_id = Reservations.seat_id AND
-              Reservations.start_time <= ? AND
-              Reservations.end_time > ?
-      ";
+    SELECT 
+      Seats.seat_id,
+      CASE
+        WHEN Seats.available = 0 THEN 'Unavailable'
+        WHEN Reservations.seat_id IS NULL THEN 'Available'
+        ELSE 'Borrowed'
+      END as status
+    FROM 
+      Seats
+    LEFT JOIN Reservations ON 
+      Seats.seat_id = Reservations.seat_id AND
+      Reservations.start_time <= datetime(?, 'unixepoch', '+8 hours') AND
+      Reservations.end_time > datetime(?, 'unixepoch', '+8 hours')";
 
   // 取得每個座位的狀態，回傳為vector包含(座位號碼, 狀態)
   let result: Vec<(u16, String)> = handle_sqlx(
@@ -63,19 +62,18 @@ pub async fn get_seats_status_in_specific_timeslots(
   查詢特定時間段中位置是否被借用
    */
   let sql = "
-        SELECT DISTINCT 
-            Seats.seat_id,
-            CASE
-                WHEN Seats.available = 0 THEN 'Unavailable'
-                WHEN Reservations.seat_id IS NULL THEN 'Available'
-                ELSE 'Borrowed'
-            END as status
-        FROM 
-            Seats
-        LEFT JOIN Reservations ON 
-            Seats.seat_id = Reservations.seat_id AND
-            (MAX(?, start_time) < MIN(?, end_time))
-    ";
+    SELECT DISTINCT 
+      Seats.seat_id,
+      CASE
+        WHEN Seats.available = 0 THEN 'Unavailable'
+        WHEN Reservations.seat_id IS NULL THEN 'Available'
+        ELSE 'Borrowed'
+      END as status
+    FROM 
+      Seats
+    LEFT JOIN Reservations ON 
+      Seats.seat_id = Reservations.seat_id AND
+      (MAX(datetime(?, 'unixepoch', '+8 hours'), start_time) < MIN(datetime(?, 'unixepoch', '+8 hours'), end_time))";
 
   let result: Vec<(u16, String)> = handle_sqlx(
     sqlx::query_as::<_, (u16, String)>(sql)
@@ -111,13 +109,14 @@ pub async fn get_seat_reservations(
   seat_id: u16,
 ) -> Result<Vec<(i64, i64)>, Status> {
   let sql = "
-        SELECT
-            start_time, end_time
-        FROM 
-            Reservations
-        WHERE
-            seat_id = ? AND start_time >= ? AND end_time <= ?
-    ";
+    SELECT
+      start_time, end_time
+    FROM 
+      Reservations
+    WHERE
+      seat_id = ? AND 
+      start_time >= datetime(?, 'unixepoch', '+8 hours') AND 
+      end_time <= datetime(?, 'unixepoch', '+8 hours')";
 
   let timeslots: Vec<(i64, i64)> = handle_sqlx(
     sqlx::query_as::<_, (i64, i64)>(sql)

@@ -44,8 +44,20 @@ impl FromRow<'_, SqliteRow> for Reservation {
     let seat_id_i64: i64 = row.try_get("seat_id")?;
     let seat_id: u16 = seat_id_i64.try_into().map_err(|_| Error::RowNotFound)?;
 
-    let start_time: i64 = row.try_get("start_time")?;
-    let end_time: i64 = row.try_get("end_time")?;
+    let start_time_str: String = row.try_get("start_time")?;
+    let end_time_str: String = row.try_get("end_time")?;
+
+    let start_time: i64 = start_time_str
+      .parse()
+      .map_err(|source| Error::ColumnDecode {
+        index: "start_time".to_string(),
+        source: Box::new(source),
+      })?;
+
+    let end_time: i64 = end_time_str.parse().map_err(|source| Error::ColumnDecode {
+      index: "end_time".to_string(),
+      source: Box::new(source),
+    })?;
 
     Ok(Reservation {
       seat_id,

@@ -1,10 +1,12 @@
 use super::{common::*, constant::*};
-use crate::utils::{get_now, timestamp_to_naive_datetime};
+use crate::utils::{get_now, naive_datetime_to_timestamp, timestamp_to_naive_datetime};
 
 pub fn validate_datetime(start_time: i64, end_time: i64) -> Result<(), ValidationError> {
   on_the_same_day(start_time, end_time)?;
 
-  let current_timestamp = get_now().timestamp();
+  let now = get_now(); // 本地時間
+  let current_timestamp: i64 =
+    naive_datetime_to_timestamp(now).expect("Failed to convert naive datetime to timestamp");
 
   if start_time < current_timestamp {
     return Err(ValidationError::new(

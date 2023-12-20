@@ -101,7 +101,11 @@ pub fn naive_date_to_timestamp(
     Status::InternalServerError
   })?;
 
-  let datetime = NaiveDateTime::new(date, time) - chrono::Duration::hours(8);
+  // 本地日期時間 GMT++8
+  let datetime_local = NaiveDateTime::new(date, time);
+  // GNT 0 日期時間
+  let datetime = datetime_local - chrono::Duration::hours(8);
+
   let timestamp = datetime.timestamp();
 
   Ok(timestamp)
@@ -115,16 +119,19 @@ pub fn naive_datetime_to_timestamp(datetime: NaiveDateTime) -> Result<i64, Statu
 }
 
 pub fn timestamp_to_naive_datetime(timestamp: i64) -> Result<NaiveDateTime, Status> {
+  // GMT+8
   let offset = FixedOffset::east_opt(8 * 3600).ok_or_else(|| {
     log::error!("Invalid offset");
     Status::InternalServerError
   })?;
 
+  // GMT 0 日期時間
   let datetime = Utc.timestamp_opt(timestamp, 0).single().ok_or_else(|| {
     log::error!("Invalid timestamp");
     Status::InternalServerError
   })?;
 
+  // 本地日期時間
   let datetime_local = datetime.with_timezone(&offset).naive_local();
 
   Ok(datetime_local)

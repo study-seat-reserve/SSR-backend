@@ -265,6 +265,10 @@ pub async fn reserve_seat(
     return Err(Status::Conflict);
   }
 
+  /*
+  判斷當天否有還沒完成的預約
+   */
+
   database::reservation::reserve_seat(pool.inner(), &user_name, seat_id, start_time, end_time)
     .await?;
 
@@ -306,7 +310,7 @@ pub async fn update_reservation(
   )
   .await?
   {
-    return Err(Status::Conflict);
+    return Err(Status::BadRequest);
   }
 
   database::reservation::update_reservation_time(
