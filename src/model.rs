@@ -1,3 +1,4 @@
+mod common;
 pub mod constant;
 pub mod reservation;
 pub mod seat;

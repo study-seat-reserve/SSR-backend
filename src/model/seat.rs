@@ -1,7 +1,4 @@
-use super::validate_utils::validate_seat_id;
-use serde::{Deserialize, Serialize};
-use std::{io::ErrorKind, str::FromStr, string::ToString};
-use validator::Validate;
+use super::{common::*, validate_utils::*};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Seat {

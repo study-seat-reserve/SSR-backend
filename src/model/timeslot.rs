@@ -1,6 +1,4 @@
-use super::validate_utils::validate_datetime;
-use serde::{Deserialize, Serialize};
-use validator::{Validate, ValidationError};
+use super::{common::*, validate_utils::*};
 
 #[derive(Debug, Serialize, Deserialize, Validate)]
 #[validate(schema(function = "validate_timeslot", skip_on_field_errors = false))]

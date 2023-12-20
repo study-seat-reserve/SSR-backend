@@ -1,10 +1,12 @@
-use std::env;
+use super::{common::*, user};
+use crate::utils::handle;
 
-use super::user;
-use crate::utils::*;
 use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation};
-use rocket::request::{FromRequest, Outcome, Request};
-use serde::{Deserialize, Serialize};
+use rocket::{
+  http::Status,
+  request::{FromRequest, Outcome, Request},
+};
+use std::env;
 
 pub trait Claim: Sized {
   fn verify_jwt(token: &str) -> Result<Self, Status>;

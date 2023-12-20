@@ -1,5 +1,4 @@
-use crate::{model::*, utils::*};
-use sqlx::{query, query_as, Pool, Sqlite};
+use super::common::*;
 
 // 註冊
 pub async fn insert_new_user_info(

@@ -369,6 +369,7 @@ pub async fn display_user_reservations(
   Ok(Json(reservations))
 }
 
+// 設定不可預約時間
 #[post("/api/set_timeslots", format = "json", data = "<timeslot>")]
 pub async fn set_unavailable_timeslots(
   pool: &State<Pool<Sqlite>>,
@@ -389,6 +390,7 @@ pub async fn set_unavailable_timeslots(
   Ok(())
 }
 
+// 設定不可使用座位
 #[post(
   "/api/set_seat_availability",
   format = "json",

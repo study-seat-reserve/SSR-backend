@@ -1,5 +1,4 @@
-use crate::{model::*, utils::*};
-use sqlx::{query, query_as, query_scalar, Pool, Sqlite};
+use super::common::*;
 
 // 預約座位
 pub async fn reserve_seat(

@@ -1,11 +1,8 @@
-use crate::{
-  database::timeslot::{insert_unavailable_timeslot, is_overlapping_with_unavailable_timeslot},
-  model::*,
-  utils::{get_today, naive_date_to_timestamp},
+use super::{
+  common::*,
+  timeslot::{insert_unavailable_timeslot, is_overlapping_with_unavailable_timeslot},
 };
-
 use chrono::Datelike;
-use sqlx::{query, query_as, Pool, Sqlite};
 
 pub async fn init_db(pool: &Pool<Sqlite>) {
   log::info!("Initializing db");
@@ -126,8 +123,7 @@ async fn init_unavailable_timeslots(pool: &Pool<Sqlite>) {
     if is_holiday {
       let start_time: i64 =
         naive_date_to_timestamp(future_date, 0, 0, 0).expect("Invalid timestamp");
-      let end_time: i64 =
-        naive_date_to_timestamp(future_date, 9, 0, 0).expect("Invalid timestamp");
+      let end_time: i64 = naive_date_to_timestamp(future_date, 9, 0, 0).expect("Invalid timestamp");
 
       time_slots.push((start_time, end_time));
 
@@ -140,8 +136,7 @@ async fn init_unavailable_timeslots(pool: &Pool<Sqlite>) {
     } else {
       let start_time: i64 =
         naive_date_to_timestamp(future_date, 0, 0, 0).expect("Invalid timestamp");
-      let end_time: i64 =
-        naive_date_to_timestamp(future_date, 8, 0, 0).expect("Invalid timestamp");
+      let end_time: i64 = naive_date_to_timestamp(future_date, 8, 0, 0).expect("Invalid timestamp");
 
       time_slots.push((start_time, end_time));
 

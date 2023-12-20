@@ -1,3 +1,4 @@
+mod common;
 pub mod init;
 pub mod reservation;
 pub mod seat;

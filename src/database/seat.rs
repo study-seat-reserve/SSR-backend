@@ -1,5 +1,4 @@
-use crate::{model::*, utils::*};
-use sqlx::{query_scalar, Pool, Sqlite};
+use super::common::*;
 
 // 查詢所有位置在特定時間點狀態
 pub async fn get_all_seats_status(

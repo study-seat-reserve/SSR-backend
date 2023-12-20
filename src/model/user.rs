@@ -1,13 +1,5 @@
+use super::common::*;
 use regex::Regex;
-use serde::{Deserialize, Serialize};
-use sqlx::{
-  decode::Decode,
-  error::BoxDynError,
-  sqlite::{Sqlite, SqliteRow, SqliteTypeInfo, SqliteValueRef},
-  FromRow, Row, Type,
-};
-use std::{io::ErrorKind, str::FromStr};
-use validator::{Validate, ValidationError};
 
 #[derive(Debug, Serialize, Deserialize, Validate)]
 pub struct RegisterRequest {
