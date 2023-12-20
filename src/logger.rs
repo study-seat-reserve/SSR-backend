@@ -63,3 +63,56 @@ fn remove_ansi_escape_codes(s: &str) -> String {
     .replace_all(s, "")
     .to_string()
 }
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+  use std::{
+    fs,
+    io::{Read, Seek, Write},
+  };
+
+  #[test]
+  fn test_init_logger() {
+    let tmp_dir = tempfile::TempDir::new().expect("create temp dir");
+    std::env::set_var("ROOT", tmp_dir.path());
+
+    init_logger(LevelFilter::Info);
+
+    assert!(tmp_dir.path().join("logfiles").exists());
+
+    let today = chrono::Local::now().format("%Y-%m-%d").to_string();
+    let log_file = tmp_dir.path().join(format!("logfiles/{}.txt", today));
+    assert!(log_file.exists());
+
+    let mut file = fs::OpenOptions::new()
+      .write(true)
+      .open(log_file)
+      .expect("open log file");
+
+    let log_msg = "[INFO] [2023-03-10 15:16:17.012] Test log message\n";
+    writeln!(&mut file, "{}", log_msg).expect("write log");
+
+    let mut contents = String::new();
+    file
+      .seek(std::io::SeekFrom::Start(0))
+      .expect("seek to start");
+    file.read_to_string(&mut contents).expect("read file");
+
+    assert_eq!(contents, log_msg);
+
+    std::env::remove_var("ROOT");
+  }
+
+  #[test]
+  fn test_remove_ansi_escape_codes() {
+    let input = "";
+    assert_eq!(remove_ansi_escape_codes(input), "");
+
+    let input = "軟工測試!";
+    assert_eq!(remove_ansi_escape_codes(input), "軟工測試!");
+
+    let input = "\x1B[31m軟工\x1B[0m\x1B[32m測試\x1B[0m";
+    assert_eq!(remove_ansi_escape_codes(input), "軟工測試!");
+  }
+}

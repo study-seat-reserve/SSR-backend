@@ -92,28 +92,27 @@ fn validate_reservation(reservation: &Reservation) -> Result<(), ValidationError
 
   validate_datetime(date, start_time, end_time)
 }
-
 //TEST
 
 #[cfg(test)]
-mod tests {
-
+mod test {
   use super::*;
   use chrono::Local;
   use validator::ValidationError;
 
   #[test]
   fn test_validate_seat_id() {
-    // Valid
-    assert!(validate_seat_id(100).is_ok());
-
-    // Invalid
     assert!(validate_seat_id(0).is_err());
-    assert!(validate_seat_id(500).is_err());
+    assert!(validate_seat_id(109).is_ok());
+    assert!(validate_seat_id(218).is_err());
 
-    // Check error type
     assert_eq!(
       validate_seat_id(0).err().unwrap(),
+      ValidationError::new("Seat id out of range")
+    );
+
+    assert_eq!(
+      validate_seat_id(218).err().unwrap(),
       ValidationError::new("Seat id out of range")
     );
   }
@@ -121,14 +120,20 @@ mod tests {
   #[test]
   fn test_validate_date() {
     // Valid
-    let valid_date = Local::now().date_naive() + chrono::Duration::days(1);
+    let valid_date = Local::now().date_naive() + chrono::Duration::days(2);
     assert!(validate_date(&valid_date).is_ok());
-
     // Invalid
     let invalid_date = Local::now().date_naive() - chrono::Duration::days(1);
     assert!(validate_date(&invalid_date).is_err());
 
-    // Check error
+    let invalid_date = Local::now().date_naive() + chrono::Duration::days(4);
+    assert!(validate_date(&invalid_date).is_err());
+
+    assert_eq!(
+      validate_date(&invalid_date).err().unwrap(),
+      ValidationError::new("Invalid reservation date")
+    );
+
     assert_eq!(
       validate_date(&invalid_date).err().unwrap(),
       ValidationError::new("Invalid reservation date")
@@ -137,37 +142,87 @@ mod tests {
 
   #[test]
   fn test_validate_datetime() {
-    // Valid
-    let tomorrow = Local::now().date_naive() + chrono::Duration::days(1);
-    assert!(validate_datetime(tomorrow, 800, 1000).is_ok());
+    // end_time > start_time
+    let result: Result<(), ValidationError> = validate_datetime(
+      get_today() + Duration::days(1),
+      get_now() + 1,
+      get_now() + 2,
+    );
+    assert!(result.is_ok());
 
-    // Invalid start time
-    let now = Local::now().date_naive();
-    assert!(validate_datetime(now, 700, 800).is_err());
+    // end_time < start_time
+    let result = validate_datetime(
+      get_today() + Duration::days(1),
+      get_now() + 2,
+      get_now() + 1,
+    );
+    assert!(result.is_err());
 
-    // Invalid order
-    let tomorrow = Local::now().date_naive() + chrono::Duration::days(1);
-    assert!(validate_datetime(tomorrow, 800, 700).is_err());
+    // date == today && start_time < now
+    let result = validate_datetime(get_today(), get_now() - 1, get_now() + 1);
+    assert!(result.is_err());
+
+    // date != today && start_time > now
+    let result = validate_datetime(
+      get_today() + Duration::days(1),
+      get_now() + 1,
+      get_now() + 2,
+    );
+    assert!(result.is_ok());
+  }
+
+  #[test]
+  fn test_validate_update_reservation() {
+    let valid_update = UpdateReservation {
+      date: get_today() + Duration::days(1),
+      new_start_time: get_now() + 1,
+      new_end_time: get_now() + 2,
+    };
+    assert!(validate_update_reservation(&valid_update).is_ok());
+
+    // end_time < start_time
+    let invalid_update = UpdateReservation {
+      date: get_today(),
+      new_start_time: get_now() + 2,
+      new_end_time: get_now() + 1,
+    };
+    assert!(validate_update_reservation(&invalid_update).is_err());
+
+    // date == today && new_start_time < now
+    let invalid_update = UpdateReservation {
+      date: get_today(),
+      new_start_time: get_now() - 1,
+      new_end_time: get_now() + 1,
+    };
+    assert!(validate_update_reservation(&invalid_update).is_err());
   }
 
   #[test]
   fn test_validate_reservation() {
-    let reservation = Reservation {
-      seat_id: 100,
-      date: Local::now().date_naive() + chrono::Duration::days(1),
-      start_time: 800,
-      end_time: 1000,
+    let valid_reservation = Reservation {
+      seat_id: 1,
+      date: get_today() + Duration::days(1),
+      start_time: get_now() + 1,
+      end_time: get_now() + 2,
     };
+    assert!(validate_reservation(&valid_reservation).is_ok());
 
-    assert!(validate_reservation(&reservation).is_ok());
-
+    // end_time < start_time
     let invalid_reservation = Reservation {
-      seat_id: 0,
-      date: Local::now().date_naive() - chrono::Duration::days(1),
-      start_time: 800,
-      end_time: 700,
+      seat_id: 1,
+      date: get_today(),
+      start_time: get_now() + 2,
+      end_time: get_now() + 1,
     };
+    assert!(validate_reservation(&invalid_reservation).is_err());
 
+    // date == today && start_time < now
+    let invalid_reservation = Reservation {
+      seat_id: 1,
+      date: get_today(),
+      start_time: get_now() - 1,
+      end_time: get_now() + 1,
+    };
     assert!(validate_reservation(&invalid_reservation).is_err());
   }
 }

@@ -1,5 +1,6 @@
 use crate::{database, utils::*};
 use chrono::Datelike;
+use rusqlite::params;
 use std::fs;
 use tokio::time::sleep;
 
@@ -82,3 +83,5 @@ pub fn set_unavailable_timeslots() {
       .expect("Inserting unavailable timeslots failed");
   }
 }
+
+// TEST

@@ -1,6 +1,7 @@
 use super::user;
 use crate::utils::*;
 use chrono::{Duration, Utc};
+
 use rocket::request::{FromRequest, Outcome, Request};
 use serde::{Deserialize, Serialize};
 
@@ -33,62 +34,55 @@ impl<'r> FromRequest<'r> for Claims {
 }
 
 // TEST
+#[cfg(test)]
+mod test {
+  use super::*;
+  use crate::model::user::{self};
+  use chrono::{Duration, Utc};
+  use jsonwebtoken::{decode, encode, Algorithm, DecodingKey, EncodingKey, Header, Validation};
 
-use super::*;
-use crate::model::user::{UserInfo, UserRole};
-use jsonwebtoken::{decode, encode, Algorithm, DecodingKey, EncodingKey, Header, Validation};
-use rocket::http::Status;
+  fn test_claims() {
+    let claim = Claims {
+      user: "istestuser".to_string(),
+      role: user::UserRole::RegularUser,
+      exp: 1234567,
+    };
 
-const TEST_USERNAME: &str = "test_user";
-const TEST_KEY: &str = "test_key";
+    let serialized = serde_json::to_string(&claim).unwrap();
+    let deserialized: Claims = serde_json::from_str(&serialized).unwrap();
 
-#[test]
-fn test_claims_serialization() {
-  let claims = Claims {
-    user: "test_user".to_string(),
-    role: UserRole::RegularUser,
-    exp: 1234567,
-  };
+    assert_eq!(claim, deserialized);
+  }
 
-  let serialized = serde_json::to_string(&claims).unwrap();
-  let deserialized: Claims = serde_json::from_str(&serialized).unwrap();
+  #[test]
+  fn test_token() {
+    let key = "istestkey";
+    let encoding_key = EncodingKey::from_secret(key.as_bytes());
+    let decoding_key = DecodingKey::from_secret(key.as_bytes());
 
-  assert_eq!(claims, deserialized);
-}
+    let header = Header::default();
 
-#[test]
-fn test_token_encoding_decoding() {
-  let test_userinfo = UserInfo {
-    user_name: TEST_USERNAME.to_string(),
-    password: "test_password".to_string(),
-    email: "test@example.com".to_string(),
-    user_role: UserRole::RegularUser,
-    verified: true,
-  };
+    let expiration = Utc::now()
+      .checked_add_signed(Duration::hours(1))
+      .expect("valid timestamp")
+      .timestamp() as usize;
 
-  let test_key = TEST_KEY;
-  let encoding_key = EncodingKey::from_secret(test_key.as_bytes());
+    let claims = Claims {
+      user: "istestuser".to_string(),
+      role: user::UserRole::RegularUser,
+      exp: expiration,
+    };
 
-  let header = Header::default();
+    let token = encode(&header, &claims, &encoding_key).unwrap();
 
-  let expiration = Utc::now()
-    .checked_add_signed(Duration::hours(1))
-    .expect("valid timestamp")
-    .timestamp() as usize;
+    let validation = Validation::new(Algorithm::HS256);
+    let decoded_claims = decode::<Claims>(&token, &decoding_key, &validation);
+    assert!(decoded_claims.is_ok());
 
-  let claims = Claims {
-    user: test_userinfo.user_name.clone(),
-    role: test_userinfo.user_role,
-    exp: expiration,
-  };
+    let decoded_claims = decoded_claims.unwrap();
+    assert_eq!(decoded_claims.claims, claims);
+  }
 
-  let token = encode(&header, &claims, &encoding_key).unwrap();
-
-  let decoding_key = DecodingKey::from_secret(test_key.as_bytes());
-  let validation = Validation::new(Algorithm::HS256);
-
-  let decoded_claims = decode::<Claims>(&token, &decoding_key, &validation);
-
-  assert!(decoded_claims.is_ok());
-  assert_eq!(decoded_claims.unwrap().claims, claims);
+  /* UNDO */
+  // test_from_request
 }

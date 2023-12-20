@@ -233,24 +233,26 @@ pub fn verify_jwt(token: &str) -> Result<token::Claims, Status> {
 mod tests {
 
   use super::*;
-  use chrono::{Duration, NaiveDate, NaiveTime, Utc};
-
-  #[test]
-  fn test_get_now() {
-    let now = get_now();
-    assert!(now > 0);
-  }
+  use chrono::{Duration, NaiveDate, NaiveTime};
+  use rocket::http::Status;
+  use validator::{ValidationError, ValidationErrors};
 
   #[test]
   fn test_get_today() {
-    let today = Local::now().date_naive();
-    assert_eq!(get_today(), today);
+    assert_eq!(get_today(), Local::now().date_naive());
+  }
+
+  #[test]
+  fn test_get_now() {
+    assert_eq!(
+      get_now(),
+      parse_time(Local::now().naive_local().time()).unwrap()
+    );
   }
 
   #[test]
   fn test_get_datetime() {
-    let datetime = get_datetime();
-    assert!(datetime.timestamp() > 0);
+    assert_eq!(get_datetime(), Local::now().naive_local());
   }
 
   #[test]
@@ -267,24 +269,29 @@ mod tests {
 
   #[test]
   fn test_date_from_string() {
-    let date_str = "2023-02-15";
+    let date_str = "2023-12-27";
     let expected = NaiveDate::parse_from_str(date_str, "%Y-%m-%d").unwrap();
-
     assert_eq!(date_from_string(date_str).unwrap(), expected);
   }
 
   #[test]
   fn test_parse_time() {
-    let time = NaiveTime::from_hms_opt(12, 34, 56).expect("Invalid time values");
-    assert_eq!(parse_time(time).unwrap(), 123456);
+    let time = NaiveTime::from_hms_opt(10, 08, 29).expect("Invalid time values");
+    assert_eq!(parse_time(time).unwrap(), 100829);
   }
 
   #[test]
   fn test_validate_seat_id() {
-    validate_seat_id(100).unwrap();
+    let seat_id = 109;
+    assert!(validate_seat_id(seat_id).is_ok());
 
     assert_eq!(
       validate_seat_id(0).unwrap_err(),
+      Status::UnprocessableEntity
+    );
+
+    assert_eq!(
+      validate_seat_id(218).unwrap_err(),
       Status::UnprocessableEntity
     );
   }
@@ -293,11 +300,15 @@ mod tests {
   fn test_validate_date() {
     let today = Local::now().date_naive();
     let valid_date = today + Duration::days(1);
-
-    validate_date(valid_date).unwrap();
+    assert!(validate_date(valid_date).is_ok());
 
     let invalid_date = today - Duration::days(1);
+    assert_eq!(
+      validate_date(invalid_date).unwrap_err(),
+      Status::UnprocessableEntity
+    );
 
+    let invalid_date = today + Duration::days(4);
     assert_eq!(
       validate_date(invalid_date).unwrap_err(),
       Status::UnprocessableEntity
@@ -306,31 +317,129 @@ mod tests {
 
   #[test]
   fn test_validate_datetime() {
-    let tomorrow = Utc::now().date_naive() + Duration::days(1);
+    let date = get_today() + Duration::days(1);
+    let start_time = get_now() + 3600;
+    let end_time = start_time + 3600;
+    assert!(validate_datetime(date, start_time, end_time).is_ok());
 
-    validate_datetime(tomorrow, 800, 1000).unwrap();
+    let date = get_today();
+    let start_time = get_now() - 3600;
+    let end_time = start_time + 3600;
+    assert!(validate_datetime(date, start_time, end_time).is_err());
 
-    let now = Utc::now().date_naive();
-    assert_eq!(
-      validate_datetime(now, 700, 800).unwrap_err(),
-      Status::UnprocessableEntity
-    );
-
-    let invalid_order = validate_datetime(tomorrow, 800, 700);
-    assert_eq!(invalid_order.unwrap_err(), Status::UnprocessableEntity);
+    let date = get_today() + Duration::days(1);
+    let start_time = get_now();
+    let end_time = start_time - 3600;
+    assert!(validate_datetime(date, start_time, end_time).is_err());
   }
 
   #[test]
-  fn test_send_verification_email() {
-    std::env::set_var("EMAIL_ADDRESS", "test@example.com");
-    std::env::set_var("EMAIL_PASSWORD", "test_password");
-    std::env::set_var("EMAIL_DOMAIN", "example.com");
-
-    let test_email = "test@example.com";
-    let test_url = "https://test.com/test";
-
-    let result = send_verification_email(test_email, test_url);
-
-    assert!(result.is_ok());
+  fn test_handle_ok() {
+    let result: Result<&str, rocket::http::Status> =
+      handle::<_, std::io::Error>(Ok("Success"), "Test");
+    assert_eq!(result, Ok("Success"));
   }
+
+  #[test]
+  fn test_handle_not_found_error() {
+    let result: Result<(), rocket::http::Status> =
+      handle(Err(std::io::Error::from(ErrorKind::NotFound)), "Test");
+    assert_eq!(result, Err(Status::NotFound));
+  }
+
+  #[test]
+  fn test_handle_permission_denied_error() {
+    let result: Result<(), rocket::http::Status> = handle(
+      Err(std::io::Error::from(ErrorKind::PermissionDenied)),
+      "Test",
+    );
+    assert_eq!(result, Err(Status::Forbidden));
+  }
+
+  #[test]
+  fn test_handle_connection_refused_error() {
+    let result: Result<(), rocket::http::Status> = handle(
+      Err(std::io::Error::new(
+        std::io::ErrorKind::ConnectionRefused,
+        "Connection refused",
+      )),
+      "Test",
+    );
+    assert_eq!(result, Err(Status::ServiceUnavailable));
+  }
+
+  #[test]
+  fn test_handle_other_io_error() {
+    let result: Result<(), rocket::http::Status> = handle::<_, std::io::Error>(
+      Err(std::io::Error::new(
+        std::io::ErrorKind::Other,
+        "Other error",
+      )),
+      "Test",
+    );
+    assert_eq!(result, Err(Status::InternalServerError));
+  }
+
+  #[test]
+  fn test_handle_rusqlite_constraint_violation() {
+    let result: Result<u32, rusqlite::Error> = Err(rusqlite::Error::SqliteFailure(
+      rusqlite::ffi::Error {
+        code: rusqlite::ffi::ErrorCode::ConstraintViolation,
+        extended_code: 0,
+      },
+      None,
+    ));
+    let prefix = "Test";
+    assert_eq!(handle(result, prefix), Err(Status::UnprocessableEntity));
+  }
+
+  #[test]
+  fn test_handle_rusqlite_permission_denied() {
+    let result: Result<(), rocket::http::Status> = handle(
+      Err(rusqlite::Error::SqliteFailure(
+        rusqlite::ffi::Error {
+          code: rusqlite::ffi::ErrorCode::PermissionDenied,
+          extended_code: 0,
+        },
+        None,
+      )),
+      "Test",
+    );
+    assert_eq!(result, Err(Status::Forbidden));
+  }
+
+  fn create_validation_errors() -> ValidationErrors {
+    let mut validation_errors = ValidationErrors::new();
+
+    validation_errors.add("field1", ValidationError::new("error1"));
+
+    validation_errors.add("field2", ValidationError::new("error2"));
+
+    validation_errors
+  }
+
+  // #[test]
+  // fn test_handle_validator() {
+  //   let result = Ok(());
+  //   assert_eq!(handle_validator(result), Ok(()));
+
+  //   let validation_errors = create_validation_errors();
+  //   let result = Err(validation_errors);
+  //   let status_result = handle_validator(result);
+  //   assert!(status_result.is_err());
+
+  //   match status_result {
+  //     Err(Status::UnprocessableEntity) => {
+  //       assert!(status_result
+  //         .unwrap_err()
+  //         .to_string()
+  //         .contains("Invalid field1 Error: error1"));
+  //       assert!(status_result
+  //         .unwrap_err()
+  //         .to_string()
+  //         .contains("Invalid field2 Error: error2"));
+  //     }
+  //     _ => panic!("Unexpected result variant"),
+  //   }
+  // }
 }

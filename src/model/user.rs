@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use std::{io::ErrorKind, str::FromStr};
 use validator::{Validate, ValidationError};
 
-#[derive(Debug, Serialize, Deserialize, Validate, Clone)]
+#[derive(Debug, Serialize, Deserialize, Validate)]
 pub struct User {
   #[validate(length(min = 1, max = 20), custom = "validate_username")]
   pub user_name: String,
@@ -24,7 +24,7 @@ pub struct UserInfo {
   pub verified: bool,
 }
 
-#[derive(Debug, Serialize, Deserialize, Validate, Clone)]
+#[derive(Debug, Serialize, Deserialize, Validate)]
 pub struct LoginCreds {
   #[validate(length(min = 1, max = 20), custom = "validate_username")]
   pub user_name: String,
@@ -85,70 +85,151 @@ fn validate_username(user_name: &str) -> Result<(), ValidationError> {
 }
 
 //TEST
+#[cfg(test)]
+mod tests {
+  use super::*;
 
-#[test]
-fn test_user_validation() {
-  let valid_user = User {
-    user_name: "john123".to_string(),
-    password: "password123".to_string(),
-    email: "john@example.com".to_string(),
-  };
+  #[test]
+  fn test_user() {
+    // valid user
+    let user = User {
+      user_name: "istestuser".to_string(),
+      password: "istestpassword".to_string(),
+      email: "istestemail@mail.ntou.edu.tw".to_string(),
+    };
+    assert!(
+      user.validate().is_ok(),
+      "Error: {:?}",
+      user.validate().err()
+    );
+    // invalid user
+    let user = User {
+      user_name: "".to_string(),
+      password: "testpw".to_string(),
+      email: "istestemail".to_string(),
+    };
+    assert!(user.validate().is_err(), "Error");
+    if let Err(errors) = user.validate() {
+      assert_eq!(errors.field_errors().len(), 3); // error for username field
+    }
 
-  assert!(valid_user.validate().is_ok());
+    let user = User {
+      user_name: "istestuseristestuseristestuser".to_string(),
+      password: "istestpasswordistestpasswordistestpassword".to_string(),
+      email: "istestemail".to_string(),
+    };
+    assert!(user.validate().is_err(), "Error");
+    if let Err(errors) = user.validate() {
+      assert_eq!(errors.field_errors().len(), 3); // error for username field
+    }
+  }
 
-  let invalid_user = User {
-    user_name: "bad user".to_string(),
-    ..valid_user.clone()
-  };
+  #[test]
+  fn test_user_info() {
+    let user = UserInfo {
+      user_name: "istestuser".to_string(),
+      password: "istestpassword".to_string(),
+      email: "istestemail@mail.ntou.edu.tw".to_string(),
+      user_role: UserRole::RegularUser,
+      verified: true,
+    };
 
-  assert!(invalid_user.validate().is_err());
-}
+    assert_eq!(user.user_name, "istestuser");
+    assert_eq!(user.password, "istestpassword");
+    assert_eq!(user.email, "istestemail@mail.ntou.edu.tw");
+    assert_eq!(user.user_role, UserRole::RegularUser);
+    assert_eq!(user.verified, true);
 
-#[test]
-fn test_login_validation() {
-  let valid_creds = LoginCreds {
-    user_name: "john123".to_string(),
-    password: "password123".to_string(),
-  };
+    let user = UserInfo {
+      user_name: "istestuser".to_string(),
+      password: "istestpassword".to_string(),
+      email: "istestemail@mail.ntou.edu.tw".to_string(),
+      user_role: UserRole::RegularUser,
+      verified: false,
+    };
 
-  assert!(valid_creds.validate().is_ok());
+    assert_eq!(user.user_name, "istestuser");
+    assert_eq!(user.password, "istestpassword");
+    assert_eq!(user.email, "istestemail@mail.ntou.edu.tw");
+    assert_eq!(user.user_role, UserRole::RegularUser);
+    assert_eq!(user.verified, false);
+  }
 
-  let invalid_creds = LoginCreds {
-    user_name: "bad user".to_string(),
-    ..valid_creds.clone()
-  };
+  #[test]
+  fn test_login_creds() {
+    // valid
+    let login_creds = LoginCreds {
+      user_name: "istestuser".to_string(),
+      password: "istestpassword".to_string(),
+    };
+    assert!(login_creds.validate().is_ok());
 
-  assert!(invalid_creds.validate().is_err());
-}
+    // invalid
+    let login_creds = LoginCreds {
+      user_name: "".to_string(),      // Invalid username
+      password: "testpw".to_string(), // Invalid password
+    };
 
-#[test]
-fn test_user_role_conversion() {
-  let regular = UserRole::RegularUser;
-  let admin = UserRole::Admin;
+    assert!(login_creds.validate().is_err());
+    if let Err(errors) = login_creds.validate() {
+      assert_eq!(errors.field_errors().len(), 2); // Expecting errors for both fields
+    }
+  }
 
-  assert_eq!(regular.to_string(), "RegularUser");
-  assert_eq!(admin.to_string(), "Admin");
+  #[test]
+  fn test_column_result() {
+    let result = UserRole::column_result(ValueRef::Text("RegularUser".as_bytes()));
+    assert_eq!(result, Ok(UserRole::RegularUser));
 
-  assert_eq!(UserRole::from_str("RegularUser").unwrap(), regular);
-  assert_eq!(UserRole::from_str("Admin").unwrap(), admin);
+    let result = UserRole::column_result(ValueRef::Text("Admin".as_bytes()));
+    assert_eq!(result, Ok(UserRole::Admin));
 
-  match UserRole::from_str("Invalid") {
-    Err(err) => {
+    let result = UserRole::column_result(ValueRef::Text("Invalid".as_bytes()));
+    assert!(result.is_err());
+  }
+
+  #[test]
+  fn test_to_string() {
+    assert_eq!(UserRole::RegularUser.to_string(), "RegularUser".to_owned());
+
+    assert_eq!(UserRole::Admin.to_string(), "Admin".to_owned());
+  }
+
+  #[test]
+  fn test_from_str() {
+    assert_eq!(
+      UserRole::from_str("RegularUser").unwrap(),
+      UserRole::RegularUser
+    );
+
+    assert_eq!(UserRole::from_str("Admin").unwrap(), UserRole::Admin);
+
+    assert!(UserRole::from_str("Invalid").is_err());
+  }
+
+  #[test]
+  fn test_validate_username() {
+    // Valid username
+    let result = validate_username("istestuser000");
+    assert!(result.is_ok());
+
+    // Invalid username
+    let result = validate_username("istestuser 000");
+    assert!(result.is_err());
+    if let Err(validation_error) = result {
       assert_eq!(
-        err.to_string(),
-        "Provided string does not match any UserRole variant"
+        validation_error.to_string(),
+        "Username must only contain letters and numbers"
       );
     }
-    Ok(_) => panic!("Expected an error"),
+
+    let result = validate_username("istestuser@000");
+    assert!(result.is_err());
+    if let Err(validation_error) = result {
+      assert_eq!(
+        validation_error.to_string(),
+        "Username must only contain letters and numbers"
+      );
+    }
   }
-}
-
-#[test]
-fn validate_username_allows_alphanumeric() {
-  assert!(validate_username("john123").is_ok());
-}
-
-#[test]
-fn validate_username_disallows_special_chars() {
-  assert!(validate_username("bad$user").is_err());
 }

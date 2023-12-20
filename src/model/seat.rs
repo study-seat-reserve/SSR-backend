@@ -57,43 +57,30 @@ impl FromStr for Status {
 #[cfg(test)]
 mod tests {
   use super::*;
-  use std::io::ErrorKind;
 
   #[test]
   fn test_status_to_string() {
-    let status = Status::Available;
-    assert_eq!(status.to_string(), "Available");
-
-    let status = Status::Unavailable;
-    assert_eq!(status.to_string(), "Unavailable");
-
-    let status = Status::Borrowed;
-    assert_eq!(status.to_string(), "Borrowed");
+    assert_eq!(Status::Available.to_string(), "Available");
+    assert_eq!(Status::Unavailable.to_string(), "Unavailable");
+    assert_eq!(Status::Borrowed.to_string(), "Borrowed");
   }
 
   #[test]
   fn test_status_from_str() {
-    let result = Status::from_str("Available");
-    assert!(result.is_ok());
-    assert_eq!(result.unwrap(), Status::Available);
-
-    let result = Status::from_str("Unavailable");
-    assert!(result.is_ok());
-    assert_eq!(result.unwrap(), Status::Unavailable);
-
-    let result = Status::from_str("Borrowed");
-    assert!(result.is_ok());
-    assert_eq!(result.unwrap(), Status::Borrowed);
-
-    let result = Status::from_str("Invalid");
-    assert!(result.is_err());
-    assert_eq!(result.err().unwrap().kind(), ErrorKind::InvalidInput);
+    assert_eq!(Status::from_str("Available").unwrap(), Status::Available);
+    assert_eq!(
+      Status::from_str("Unavailable").unwrap(),
+      Status::Unavailable
+    );
+    assert_eq!(Status::from_str("Borrowed").unwrap(), Status::Borrowed);
+    assert!(Status::from_str("InvalidInput").is_err());
+    assert!(Status::from_str("InvalidStatusString").is_err());
   }
 
   #[test]
   fn test_seat_serialization() {
     let seat = Seat {
-      seat_id: 5,
+      seat_id: 1,
       available: true,
       other_info: None,
     };
@@ -106,10 +93,9 @@ mod tests {
 
   #[test]
   fn test_seat_status_serialization() {
-    let status = Status::Available;
     let seat_status = SeatStatus {
       seat_id: 1,
-      status: status.clone(),
+      status: Status::Available,
     };
 
     let serialized = serde_json::to_string(&seat_status).unwrap();
@@ -129,6 +115,10 @@ mod tests {
       SeatStatus {
         seat_id: 2,
         status: Status::Unavailable,
+      },
+      SeatStatus {
+        seat_id: 3,
+        status: Status::Borrowed,
       },
     ];
 
