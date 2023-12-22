@@ -13,16 +13,18 @@ pub async fn insert_new_user_info(
     VALUES 
       (?1, ?2, ?3, ?4, ?5, ?6)";
 
-  handle_sqlx(query(sql)
-        .bind(user_info.user_name)
-        .bind(user_info.password_hash)
-        .bind(user_info.email)
-        .bind(user_info.user_role.to_string())
-        .bind(user_info.verified)
-        .bind(user_info.verification_token)
-        .execute(pool)
-        .await,
-  "Inserting new user information")?;
+  handle_sqlx(
+    query(sql)
+      .bind(user_info.user_name)
+      .bind(user_info.password_hash)
+      .bind(user_info.email)
+      .bind(user_info.user_role)
+      .bind(user_info.verified)
+      .bind(user_info.verification_token)
+      .execute(pool)
+      .await,
+    "Inserting new user information",
+  )?;
 
   log::info!("Successfully inserted new user information");
   Ok(())
@@ -38,12 +40,10 @@ pub async fn get_user_info(pool: &Pool<Sqlite>, user_name: &str) -> Result<user:
       user_name = ?";
 
   let user_info = handle_sqlx(
-    query_as::<_, user::UserInfo>(
-      sql
-    )
-    .bind(user_name)
-    .fetch_one(pool)
-    .await,
+    query_as::<_, user::UserInfo>(sql)
+      .bind(user_name)
+      .fetch_one(pool)
+      .await,
     "Selecting user info",
   )?;
 
@@ -60,12 +60,9 @@ pub async fn update_user_verified_by_token(
       verified = true 
     WHERE 
       verification_token = ?";
-      
+
   let result = handle_sqlx(
-    query(sql)
-      .bind(verification_token)
-      .execute(pool)
-      .await,
+    query(sql).bind(verification_token).execute(pool).await,
     "Updating user verified by verification_token",
   )?;
 

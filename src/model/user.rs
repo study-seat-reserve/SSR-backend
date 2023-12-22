@@ -1,5 +1,6 @@
 use super::common::*;
 use regex::Regex;
+use sqlx::{encode::IsNull, sqlite::SqliteArgumentValue, Encode};
 
 #[derive(Debug, Serialize, Deserialize, Validate)]
 pub struct RegisterRequest {
@@ -58,6 +59,17 @@ impl<'r> Decode<'r, Sqlite> for UserRole {
       "Admin" => Ok(UserRole::Admin),
       _ => Err("Invalid UserRole".into()),
     }
+  }
+}
+
+impl<'q> Encode<'q, sqlx::Sqlite> for UserRole {
+  fn encode_by_ref(&self, buf: &mut Vec<SqliteArgumentValue<'q>>) -> IsNull {
+    // 这里编码你的类型为 SQLite 能理解的格式。
+    // 例如，如果你的类型可以转换为字符串：
+    buf.push(SqliteArgumentValue::Text(self.to_string().into()));
+
+    // 如果你的类型总是产生非空值，返回 IsNull::No
+    IsNull::No
   }
 }
 

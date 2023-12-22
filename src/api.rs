@@ -377,23 +377,35 @@ pub async fn display_user_reservations(
 }
 
 // 設定不可預約時間
-#[post("/api/set_timeslots", format = "json", data = "<timeslot>")]
+#[post("/api/set_timeslots", format = "json", data = "<time_slot>")]
 pub async fn set_unavailable_timeslots(
   pool: &State<Pool<Sqlite>>,
   claims: token::UserInfoClaim,
-  timeslot: Json<timeslot::TimeSlot>,
+  time_slot: Json<timeslot::TimeSlot>,
 ) -> Result<(), Status> {
-  handle_validator(timeslot.validate())?;
-
-  if claims.role != user::UserRole::Admin {
-    log::warn!("");
-    // return;
-  }
+  handle_validator(time_slot.validate())?;
 
   let user_name = claims.user;
-  log::info!("Handling registration for user: {}", user_name);
+  if claims.role != user::UserRole::Admin {
+    log::warn!(
+      "Unauthorized attempt to set unavailable timeslots by user: {}",
+      &user_name
+    );
+    return Err(Status::Unauthorized);
+  }
 
-  // database::insert_unavailable_timeslots()
+  let start_time = time_slot.start_time;
+  let end_time = time_slot.end_time;
+
+  log::info!(
+    "Setting unavailable timeslot start_time: {:?}, end_time: {:?}",
+    start_time,
+    end_time
+  );
+
+  database::timeslot::insert_unavailable_timeslot(pool.inner(), start_time, end_time).await?;
+
+  log::info!("Unavailable timeslot set successfully");
   Ok(())
 }
 

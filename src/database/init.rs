@@ -2,6 +2,7 @@ use super::{
   common::*,
   timeslot::{insert_unavailable_timeslot, is_overlapping_with_unavailable_timeslot},
 };
+use bcrypt::{hash, DEFAULT_COST};
 use chrono::Datelike;
 
 pub async fn init_db(pool: &Pool<Sqlite>) {
@@ -74,6 +75,8 @@ pub async fn init_db(pool: &Pool<Sqlite>) {
   init_seat_info(&pool).await;
 
   init_unavailable_timeslots(&pool).await;
+
+  insert_admin(&pool).await;
 
   log::info!("Successfully initialized db");
 }
@@ -177,10 +180,37 @@ async fn init_unavailable_timeslots(pool: &Pool<Sqlite>) {
 pub async fn clear_table(pool: &Pool<Sqlite>) {
   let table_names = ["Reservations", "Seats", "Users", "UnavailableTimeSlots"];
   for table_name in table_names {
-    let query = format!("DELETE FROM {}", table_name);
-    sqlx::query(&query)
+    let sql = format!("DELETE FROM {}", table_name);
+    query(&sql)
       .execute(pool)
       .await
       .expect("Failed to clear table");
   }
+}
+
+async fn insert_admin(pool: &Pool<Sqlite>) {
+  log::info!("Inserting admin");
+
+  let admin_password = "123456789";
+  let password_hash = hash(admin_password, DEFAULT_COST).expect("Hashing password failed");
+  let admin_email = "a95424945@gmail.com";
+
+  query!(
+    "INSERT OR IGNORE INTO Users 
+        (user_name, password_hash, email, user_role, verified, verification_token) 
+      VALUES 
+        (?1, ?2, ?3, ?4, ?5, ?6)",
+    "admin",
+    password_hash,
+    admin_email,
+    user::UserRole::Admin,
+    true,
+    ""
+  )
+  .execute(pool)
+  .await
+  .unwrap_or_else(|e| {
+    log::error!("Failed to insert admin: {}", e);
+    panic!("Failed to insert admin: {}", e);
+  });
 }

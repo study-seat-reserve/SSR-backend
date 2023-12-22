@@ -57,18 +57,17 @@ pub async fn insert_unavailable_timeslot(
 ) -> Result<(), Status> {
   let mut tx = handle_sqlx(pool.begin().await, "Starting new transaction")?;
 
-  let sql = "
-    INSERT INTO UnavailableTimeSlots 
-      (start_time, end_time) 
-    VALUES 
-      (datetime(?, 'unixepoch', '+8 hours'), datetime(?, 'unixepoch', '+8 hours'))";
-
   handle_sqlx(
-    query(sql)
-      .bind(start_time)
-      .bind(end_time)
-      .execute(&mut *tx)
-      .await,
+    query!(
+      "INSERT INTO UnavailableTimeSlots 
+        (start_time, end_time) 
+      VALUES 
+        (datetime(?, 'unixepoch', '+8 hours'), datetime(?, 'unixepoch', '+8 hours'))",
+      start_time,
+      end_time
+    )
+    .execute(&mut *tx)
+    .await,
     "Inserting new UnavailableTimeSlot information",
   )?;
 
