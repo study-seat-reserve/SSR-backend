@@ -214,8 +214,13 @@ pub fn send_verification_email(user_email: &str, verification_token: &str) -> Re
 }
 
 pub fn create_userinfo_token(user_name: &str, user_role: user::UserRole) -> Result<String, Status> {
+  let duration: Duration = match user_role {
+    user::UserRole::Admin => Duration::hours(24), // 1 天後過期
+    user::UserRole::RegularUser => Duration::hours(1), // 1 小時後過期
+  };
+
   let exp = Utc::now()
-    .checked_add_signed(Duration::hours(1)) // 1 小時後過期
+    .checked_add_signed(duration)
     .expect("valid timestamp")
     .timestamp() as usize;
 

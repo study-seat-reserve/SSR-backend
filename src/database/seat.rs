@@ -141,3 +141,35 @@ pub async fn is_seat_available(pool: &Pool<Sqlite>, seat_id: u16) -> Result<bool
 
   Ok(available)
 }
+
+pub async fn update_seat_availability(
+  pool: &Pool<Sqlite>,
+  seat_id: u16,
+  available: bool,
+) -> Result<(), Status> {
+  let affected_rows = handle_sqlx(
+    query!(
+      "UPDATE Seats
+      SET
+        available = ?
+      WHERE 
+        seat_id = ? ",
+      available,
+      seat_id,
+    )
+    .execute(pool)
+    .await,
+    "Updating seat",
+  )?
+  .rows_affected();
+
+  // 檢查是否有成功更新
+  // affected_rows == 0，此次操作無作用到任何資料
+  if affected_rows == 0 {
+    log::warn!("No seat found for updation");
+
+    return Err(Status::NotFound);
+  }
+
+  Ok(())
+}

@@ -115,6 +115,7 @@ async fn main() {
     email_verify,
     resend_verification_email,
     set_unavailable_timeslots,
+    set_seat_availability
   ];
   let server = rocket::build()
     .register("/", catchers)

@@ -420,15 +420,29 @@ pub async fn set_seat_availability(
   claims: token::UserInfoClaim,
   seat_availability: Json<seat::SeatAvailabilityRequest>,
 ) -> Result<(), Status> {
-  if claims.role != user::UserRole::Admin {
-    log::warn!("");
-    // return;
-  }
+  handle_validator(seat_availability.validate())?;
 
   let user_name = claims.user;
-  log::info!("Handling registration for user: {}", user_name);
+  if claims.role != user::UserRole::Admin {
+    log::warn!(
+      "Unauthorized attempt to set seat availability by user: {}",
+      &user_name
+    );
+    return Err(Status::Unauthorized);
+  }
 
-  // database::update_seat_availability()
+  let seat_id = seat_availability.seat_id;
+  let available = seat_availability.available;
+
+  log::info!(
+    "Setting seat availability seat_id: {:?}, available: {:?}",
+    seat_id,
+    available
+  );
+
+  database::seat::update_seat_availability(pool.inner(), seat_id, available).await?;
+
+  log::info!("Seat availability set successfully");
   Ok(())
 }
 
@@ -436,5 +450,4 @@ pub async fn set_seat_availability(
 管理者設定unavaliable time slot
 管理者設定座位avaliable
 黑名單
-使用者改名
 */
