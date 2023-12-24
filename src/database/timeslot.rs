@@ -42,7 +42,7 @@ pub async fn is_within_unavailable_timeslot(
     )
     .fetch_one(pool)
     .await,
-    "Selecting overlapping unavailable time slots",
+    "Checking if the specified time within any unavailable time slots",
   )?;
 
   let is_within_timeslot: bool = result.map_or(false, |count| count != 0);

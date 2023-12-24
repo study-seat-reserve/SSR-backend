@@ -76,80 +76,168 @@ pub async fn update_user_verified_by_token(
   Ok(())
 }
 
-#[cfg(test)]
-mod tests {
-  use super::*;
-  use crate::model::user::UserInfo;
-  use sqlx::PgPool;
+// <<<<<<< HEAD
+// #[cfg(test)]
+// mod tests {
+//   use super::*;
+//   use crate::model::user::UserInfo;
+//   use sqlx::PgPool;
 
-  // 设置测试环境
-  async fn setup() -> PgPool {
-    let database_url = "postgres://localhost:5432";
-    PgPool::connect(&database_url).await.unwrap()
-  }
+//   // 设置测试环境
+//   async fn setup() -> PgPool {
+//     let database_url = "postgres://localhost:5432";
+//     PgPool::connect(&database_url).await.unwrap()
+//   }
 
-  #[tokio::test]
-  async fn test_insert_user_info() {
-    let pool = setup().await;
+//   #[tokio::test]
+//   async fn test_insert_user_info() {
+//     let pool = setup().await;
 
-    let test_data = UserInfo {
-      user_name: "testuser".to_string(),
-      password_hash: "testpassword".to_string(),
-      email: "test@eamil.ntou.edu.tw".to_string(),
-      user_role: user::UserRole::RegularUser,
-      verified: false,
-      verification_token: "token123".to_string(),
-    };
+//     let test_data = UserInfo {
+//       user_name: "testuser".to_string(),
+//       password_hash: "testpassword".to_string(),
+//       email: "test@eamil.ntou.edu.tw".to_string(),
+//       user_role: user::UserRole::RegularUser,
+//       verified: false,
+//       verification_token: "token123".to_string(),
+//     };
 
-    let result = insert_new_user_info(&pool, test_data).await;
+//     let result = insert_new_user_info(&pool, test_data).await;
 
-    assert!(result.is_ok());
+//     assert!(result.is_ok());
 
-    let saved = get_user_info(&pool, "test").await.unwrap();
-    assert_eq!(saved.user_name, "test");
-    assert_eq!(saved.email, "test@eamil.ntou.edu.tw");
-  }
+//     let saved = get_user_info(&pool, "test").await.unwrap();
+//     assert_eq!(saved.user_name, "test");
+//     assert_eq!(saved.email, "test@eamil.ntou.edu.tw");
+//   }
 
-  #[tokio::test]
-  async fn test_get_user_info() {
-    let pool = setup().await;
+//   #[tokio::test]
+//   async fn test_get_user_info() {
+//     let pool = setup().await;
 
-    let test_data = UserInfo {
-      user_name: "testuser".to_string(),
-      password_hash: "testpassword".to_string(),
-      email: "test@eamil.ntou.edu.tw".to_string(),
-      user_role: user::UserRole::RegularUser,
-      verified: false,
-      verification_token: "token123".to_string(),
-    };
-    insert_new_user_info(&pool, test_data).await.unwrap();
+//     let test_data = UserInfo {
+//       user_name: "testuser".to_string(),
+//       password_hash: "testpassword".to_string(),
+//       email: "test@eamil.ntou.edu.tw".to_string(),
+//       user_role: user::UserRole::RegularUser,
+//       verified: false,
+//       verification_token: "token123".to_string(),
+//     };
+//     insert_new_user_info(&pool, test_data).await.unwrap();
 
-    let result = get_user_info(&pool, "test").await;
+//     let result = get_user_info(&pool, "test").await;
 
-    assert!(result.is_ok());
-    let user = result.unwrap();
-    assert_eq!(user.user_name, "test");
-  }
+//     assert!(result.is_ok());
+//     let user = result.unwrap();
+//     assert_eq!(user.user_name, "test");
+//   }
 
-  #[tokio::test]
-  async fn test_update_user_verified() {
-    let pool = setup().await;
+//   #[tokio::test]
+//   async fn test_update_user_verified() {
+//     let pool = setup().await;
 
-    let test_data = UserInfo {
-      user_name: "testuser".to_string(),
-      password_hash: "testpassword".to_string(),
-      email: "test@email.ntou.edu.tw".to_string(),
-      user_role: user::UserRole::RegularUser,
-      verified: false,
-      verification_token: "token123".to_string(),
-    };
-    insert_new_user_info(&pool, test_data).await.unwrap();
+//     let test_data = UserInfo {
+//       user_name: "testuser".to_string(),
+//       password_hash: "testpassword".to_string(),
+//       email: "test@email.ntou.edu.tw".to_string(),
+//       user_role: user::UserRole::RegularUser,
+//       verified: false,
+//       verification_token: "token123".to_string(),
+//     };
+//     insert_new_user_info(&pool, test_data).await.unwrap();
 
-    let result = update_user_verified_by_token(&pool, "token123").await;
+//     let result = update_user_verified_by_token(&pool, "token123").await;
 
-    assert!(result.is_ok());
+//     assert!(result.is_ok());
 
-    let user = get_user_info(&pool, "test").await.unwrap();
-    assert!(user.verified);
-  }
-}
+//     let user = get_user_info(&pool, "test").await.unwrap();
+//     assert!(user.verified);
+//   }
+// =======
+// pub async fn insert_user_to_blacklist(
+//   pool: &Pool<Sqlite>,
+//   user_name: &str,
+//   start_time: i64,
+//   end_time: i64,
+// ) -> Result<(), Status> {
+//   let result = handle_sqlx(
+//     query!(
+//       "INSERT INTO BlackList
+//         (user_name, start_time, end_time)
+//       VALUES
+//         (
+//           ?,
+//           datetime(?, 'unixepoch', '+8 hours'),
+//           datetime(?, 'unixepoch', '+8 hours')
+//         )",
+//       user_name,
+//       start_time,
+//       end_time
+//     )
+//     .execute(pool)
+//     .await,
+//     "Inserting user to balck list",
+//   )?;
+
+//   let affected_rows = result.rows_affected();
+
+//   if affected_rows == 0 {
+//     log::warn!("No insert operation was executed");
+//     return Err(Status::NotFound);
+//   }
+
+//   Ok(())
+// }
+
+// pub async fn delete_user_from_blacklist(
+//   pool: &Pool<Sqlite>,
+//   user_name: &str,
+// ) -> Result<(), Status> {
+//   let result = handle_sqlx(
+//     query!(
+//       "DELETE FROM BlackList
+//       WHERE
+//         user_name = ? ",
+//       user_name,
+//     )
+//     .execute(pool)
+//     .await,
+//     "Deleting user from balck list",
+//   )?;
+
+//   let affected_rows = result.rows_affected();
+
+//   if affected_rows == 0 {
+//     log::warn!("No delete operation was executed from BlackList");
+//     return Err(Status::NotFound);
+//   }
+
+//   Ok(())
+// }
+
+// pub async fn is_user_in_blacklist(pool: &Pool<Sqlite>, user_name: &str) -> Result<bool, Status> {
+//   let now = naive_datetime_to_timestamp(get_now()).unwrap();
+
+//   let result = handle_sqlx(
+//     query_scalar!(
+//       "SELECT EXISTS(
+//         SELECT 1 FROM BlackList
+//         WHERE
+//           user_name = ? AND
+//           start_time <= datetime(?, 'unixepoch', '+8 hours') AND
+//           end_time > datetime(?, 'unixepoch', '+8 hours')
+//       )",
+//       user_name,
+//       now,
+//       now
+//     )
+//     .fetch_one(pool)
+//     .await,
+//     "Checking if the user is currently listed in the blacklist",
+//   )?;
+
+//   let is_within_blacklist: bool = result.map_or(false, |count| count != 0);
+
+//   Ok(is_within_blacklist)
+// >>>>>>> b4474a6bddcbbfe335b8af6bd58aa17900b58492
+// }

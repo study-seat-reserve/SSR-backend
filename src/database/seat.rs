@@ -110,7 +110,8 @@ pub async fn get_seat_reservations(
 ) -> Result<Vec<(i64, i64)>, Status> {
   let sql = "
     SELECT
-      start_time, end_time
+      CAST(strftime('%s', start_time, '-8 hours') AS INTEGER) as start_time, 
+      CAST(strftime('%s', end_time, '-8 hours') AS INTEGER) as end_time
     FROM 
       Reservations
     WHERE

@@ -1,4 +1,4 @@
-use super::common::*;
+use super::{common::*, validate_utils::*};
 use regex::Regex;
 use sqlx::{encode::IsNull, sqlite::SqliteArgumentValue, Encode};
 
@@ -29,6 +29,21 @@ pub struct LoginRequest {
   pub user_name: String,
   #[validate(length(min = 8, max = 20))]
   pub password: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Validate)]
+#[validate(schema(function = "validate_ban_request", skip_on_field_errors = false))]
+pub struct BanRequest {
+  #[validate(length(min = 1, max = 20), custom = "validate_username")]
+  pub user_name: String,
+  pub start_time: i64,
+  pub end_time: i64,
+}
+
+#[derive(Debug, Serialize, Deserialize, Validate)]
+pub struct UnBanRequest {
+  #[validate(length(min = 1, max = 20), custom = "validate_username")]
+  pub user_name: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
@@ -115,6 +130,7 @@ fn validate_username(user_name: &str) -> Result<(), ValidationError> {
   Ok(())
 }
 
+<<<<<<< HEAD
 #[cfg(test)]
 mod tests {
   use super::*;
@@ -196,4 +212,17 @@ mod tests {
   }
 
   // Add more tests for other functions as needed
+=======
+fn validate_ban_request(request: &BanRequest) -> Result<(), ValidationError> {
+  let start_time: i64 = request.start_time;
+  let end_time: i64 = request.end_time;
+
+  if end_time < start_time {
+    return Err(ValidationError::new(
+      "Invalid reservation: start time: Start time is greater than end time",
+    ));
+  }
+
+  Ok(())
+>>>>>>> b4474a6bddcbbfe335b8af6bd58aa17900b58492
 }
