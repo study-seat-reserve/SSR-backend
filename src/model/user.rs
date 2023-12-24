@@ -114,3 +114,86 @@ fn validate_username(user_name: &str) -> Result<(), ValidationError> {
 
   Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+  use regex::Regex;
+  use sqlx::{
+    sqlite::{SqliteValue, SqliteValueRef},
+    ValueRef,
+  };
+  use std::str::FromStr;
+
+  // Test RegisterRequest validation
+  #[test]
+  fn test_register_request() {
+    let valid_request = RegisterRequest {
+      user_name: "testuser".to_string(),
+      password: "testpassword".to_string(),
+      email: "test@email.ntou.edu.tw".to_string(),
+    };
+
+    assert!(valid_request.validate().is_ok());
+
+    let invalid_username_request = RegisterRequest {
+      user_name: "!test_user".to_string(),
+      password: "testpassword".to_string(),
+      email: "test@email.ntou.edu.tw".to_string(),
+    };
+    assert!(invalid_username_request.validate().is_err());
+
+    let invalid_password_request = RegisterRequest {
+      user_name: "testuser".to_string(),
+      password: "short".to_string(),
+      email: "test@email.ntou.edu.tw".to_string(),
+    };
+    assert!(invalid_password_request.validate().is_err());
+
+    let invalid_email_request = RegisterRequest {
+      user_name: "testuser".to_string(),
+      password: "testpassword".to_string(),
+      email: "invalid_email".to_string(),
+    };
+    assert!(invalid_email_request.validate().is_err());
+  }
+
+  #[test]
+  fn test_user_role_to_string() {
+    let regular_user = UserRole::RegularUser;
+    assert_eq!(regular_user.to_string(), "RegularUser");
+
+    let admin = UserRole::Admin;
+    assert_eq!(admin.to_string(), "Admin");
+  }
+
+  #[test]
+  fn test_user_role_from_str() {
+    let regular_user_str = "RegularUser";
+    let regular_user_result = UserRole::from_str(regular_user_str);
+    assert!(regular_user_result.is_ok());
+    assert_eq!(regular_user_result.unwrap(), UserRole::RegularUser);
+
+    let admin_str = "Admin";
+    let admin_result = UserRole::from_str(admin_str);
+    assert!(admin_result.is_ok());
+    assert_eq!(admin_result.unwrap(), UserRole::Admin);
+
+    let invalid_str = "NotAUserRole";
+    let invalid_result = UserRole::from_str(invalid_str);
+    assert!(invalid_result.is_err());
+  }
+
+  // Test validate_username function
+  #[test]
+  fn test_validate_username() {
+    assert!(validate_username("testuser").is_ok());
+    assert!(validate_username("testuser123").is_ok());
+    assert!(validate_username("testuser123").is_ok());
+
+    assert!(validate_username("testuser!").is_err());
+    assert!(validate_username("test user ").is_err());
+  }
+
+  // Add more tests for other functions as needed
+}

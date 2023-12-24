@@ -43,3 +43,72 @@ pub fn validate_seat_id(seat_id: u16) -> Result<(), ValidationError> {
 
   Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+
+  use super::*;
+  use crate::utils::{get_now, naive_date_to_timestamp};
+  use chrono::Timelike;
+
+  #[test]
+  fn test_validate_datetime_success() {
+    let now = get_now();
+    let start_time =
+      naive_date_to_timestamp(now.date(), now.hour(), now.minute(), now.second()).unwrap();
+    let end_time = start_time + 3600;
+
+    assert!(validate_datetime(start_time, end_time).is_ok());
+
+    let now = get_now();
+    let start_time =
+      naive_date_to_timestamp(now.date(), now.hour(), now.minute(), now.second()).unwrap();
+    let end_time = start_time - 3600;
+
+    assert!(validate_datetime(start_time, end_time).is_err());
+
+    let now = get_now();
+    let tomorrow = now.date() + chrono::Duration::days(1);
+
+    let start_time =
+      naive_date_to_timestamp(now.date(), now.hour(), now.minute(), now.second()).unwrap();
+    let end_time =
+      naive_date_to_timestamp(tomorrow, now.hour(), now.minute(), now.second()).unwrap();
+
+    assert!(validate_datetime(start_time, end_time).is_err());
+  }
+
+  #[test]
+  fn test_on_the_same_day() {
+    // today
+    let now = get_now();
+
+    let start_time =
+      naive_date_to_timestamp(now.date(), now.hour(), now.minute(), now.second()).unwrap();
+    let end_time = start_time + 3600;
+
+    assert!(on_the_same_day(start_time, end_time).is_ok());
+    // not today
+    let now = get_now();
+    let tomorrow = now.date() + chrono::Duration::days(1);
+
+    let start_time =
+      naive_date_to_timestamp(now.date(), now.hour(), now.minute(), now.second()).unwrap();
+    let end_time =
+      naive_date_to_timestamp(tomorrow, now.hour(), now.minute(), now.second()).unwrap();
+
+    assert!(on_the_same_day(start_time, end_time).is_err());
+  }
+
+  #[test]
+  fn test_validate_seat_id() {
+    let seat_id = 100;
+    assert!(validate_seat_id(seat_id).is_ok());
+
+    let seat_id = 0;
+    assert!(validate_seat_id(seat_id).is_err());
+
+    let seat_id = 218;
+    assert!(validate_seat_id(seat_id).is_err());
+  }
+}

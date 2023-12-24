@@ -21,13 +21,15 @@ ansi_term = "0.12.1"
 bcrypt = "0.15"
 uuid = { version = "1.5.0", features = ["v4", "serde", "fast-rng"] }
 validator = { version = "0.16", features = ["derive"] }
-lettre = "0.10"
+lettre = "0.11.2"
 jsonwebtoken = "9.1.0"
 sqlx = { version = "0.7", features = [
     "runtime-tokio-native-tls",
     "sqlite",
     "chrono",
 ] }
+rusqlite = "0.30"
+mockito = "1.1.1"
 
 [profile.dev]
 debug = true

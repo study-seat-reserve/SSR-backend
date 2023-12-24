@@ -84,3 +84,111 @@ fn validate_delete_reservation(request: &DeleteReservationRequest) -> Result<(),
 
   validate_datetime(start_time, end_time)
 }
+
+#[cfg(test)]
+mod tests {
+
+  use super::*;
+  use crate::utils::{get_now, naive_date_to_timestamp};
+  use chrono::Timelike;
+
+  #[test]
+  fn test_validate_reservation() {
+    let now = get_now();
+    let start_time =
+      naive_date_to_timestamp(now.date(), now.hour(), now.minute(), now.second()).unwrap();
+    let end_time = start_time + 3600;
+
+    let request = InsertReservationRequest {
+      seat_id: 1,
+      start_time,
+      end_time,
+    };
+
+    assert!(validate_reservation(&request).is_ok());
+
+    let start_time =
+      naive_date_to_timestamp(now.date(), now.hour(), now.minute(), now.second()).unwrap();
+    let end_time = start_time - 3600;
+
+    let request = InsertReservationRequest {
+      seat_id: 1,
+      start_time,
+      end_time,
+    };
+
+    assert!(validate_reservation(&request).is_err());
+  }
+
+  #[test]
+  fn test_validate_update_reservation() {
+    let now = get_now();
+
+    let start_time =
+      naive_date_to_timestamp(now.date(), now.hour(), now.minute(), now.second()).unwrap();
+    let end_time = start_time + 3600;
+
+    let new_start_time = start_time + 7200;
+    let new_end_time = new_start_time + 3600;
+
+    let request = UpdateReservationRequest {
+      start_time,
+      end_time,
+      new_start_time,
+      new_end_time,
+    };
+
+    assert!(validate_update_reservation(&request).is_ok());
+
+    let now = get_now();
+    let tomorrow = now.date() + chrono::Duration::days(1);
+
+    let start_time =
+      naive_date_to_timestamp(now.date(), now.hour(), now.minute(), now.second()).unwrap();
+    let end_time = start_time + 3600;
+
+    let new_start_time =
+      naive_date_to_timestamp(tomorrow, now.hour(), now.minute(), now.second()).unwrap();
+    let new_end_time = new_start_time + 3600;
+
+    let request = UpdateReservationRequest {
+      start_time,
+      end_time,
+      new_start_time,
+      new_end_time,
+    };
+
+    assert!(validate_update_reservation(&request).is_err());
+  }
+
+  #[test]
+  fn test_validate_delete_reservation() {
+    // valid case
+    let now = get_now();
+
+    let start_time =
+      naive_date_to_timestamp(now.date(), now.hour(), now.minute(), now.second()).unwrap();
+    let end_time = start_time + 3600;
+
+    let request = DeleteReservationRequest {
+      start_time,
+      end_time,
+    };
+
+    assert!(validate_delete_reservation(&request).is_ok());
+
+    // invalid case
+    let now = get_now();
+
+    let start_time =
+      naive_date_to_timestamp(now.date(), now.hour(), now.minute(), now.second()).unwrap();
+    let end_time = start_time - 3600;
+
+    let request = DeleteReservationRequest {
+      start_time,
+      end_time,
+    };
+
+    assert!(validate_delete_reservation(&request).is_err());
+  }
+}

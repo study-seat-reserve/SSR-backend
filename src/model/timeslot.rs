@@ -13,3 +13,48 @@ fn validate_timeslot(timeslot: &TimeSlot) -> Result<(), ValidationError> {
 
   validate_datetime(start_time, end_time)
 }
+
+#[cfg(test)]
+mod tests {
+
+  use chrono::Timelike;
+
+  use crate::utils::{get_now, naive_date_to_timestamp};
+
+  use super::*;
+
+  #[test]
+  fn test_validate_timeslot_success() {
+    let start_time = 1658401200; // 2023-07-20 10:00:00
+    let end_time = 1658424000; // 2023-07-20 14:00:00
+
+    let timeslot = TimeSlot {
+      start_time,
+      end_time,
+    };
+
+    assert!(validate_timeslot(&timeslot).is_ok());
+
+    let start_time = 1658424000; // 2023-07-20 14:00:00
+    let end_time = 1658401200; // 2023-07-20 10:00:00
+
+    let timeslot = TimeSlot {
+      start_time,
+      end_time,
+    };
+
+    assert!(validate_timeslot(&timeslot).is_err());
+
+    let now = get_now();
+    let start_time =
+      naive_date_to_timestamp(now.date(), now.hour(), now.minute() - 10, now.second()).unwrap();
+    let end_time = start_time + 3600;
+
+    let timeslot = TimeSlot {
+      start_time,
+      end_time,
+    };
+
+    assert!(validate_timeslot(&timeslot).is_err());
+  }
+}

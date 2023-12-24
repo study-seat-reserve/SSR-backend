@@ -100,3 +100,95 @@ impl<'r> FromRequest<'r> for ResendVerificationClaim {
     }
   }
 }
+
+#[cfg(test)]
+mod tests {
+  use crate::model::user::UserRole;
+
+  use super::*;
+
+  #[test]
+  fn test_verify_jwt_user_info_claim() {
+    env::set_var("SECRET_KEY", "your_secret_key");
+
+    let user_info_claim = UserInfoClaim {
+      user: "testuser".to_string(),
+      role: UserRole::RegularUser,
+      exp: 1234567890,
+    };
+
+    let token = jsonwebtoken::encode(
+      &jsonwebtoken::Header::default(),
+      &user_info_claim,
+      &jsonwebtoken::EncodingKey::from_secret("your_secret_key".as_ref()),
+    )
+    .expect("Failed to encode JWT");
+
+    let result = UserInfoClaim::verify_jwt(&token);
+    assert!(result.is_ok());
+
+    let invalid_token = "invalid_token";
+    let result = UserInfoClaim::verify_jwt(invalid_token);
+    assert!(result.is_err());
+  }
+
+  #[test]
+  fn test_verify_jwt_resend_verification_claim() {
+    env::set_var("SECRET_KEY", "your_secret_key");
+
+    let resend_verification_claim = ResendVerificationClaim {
+      email: "test@email.ntou.edu.tw".to_string(),
+      verification_token: "verificationtoken".to_string(),
+      expiration: 1234567890,
+      exp: 1234567890,
+    };
+
+    let token = jsonwebtoken::encode(
+      &jsonwebtoken::Header::default(),
+      &resend_verification_claim,
+      &jsonwebtoken::EncodingKey::from_secret("your_secret_key".as_ref()),
+    )
+    .expect("Failed to encode JWT");
+
+    let result = ResendVerificationClaim::verify_jwt(&token);
+    assert!(result.is_ok());
+
+    let invalid_token = "invalid_token";
+    let result = ResendVerificationClaim::verify_jwt(invalid_token);
+    assert!(result.is_err());
+  }
+
+  #[tokio::test]
+  async fn test_from_request_user_info_claim() {
+    env::set_var("SECRET_KEY", "your_secret_key");
+
+    let user_info_claim = UserInfoClaim {
+      user: "testuser".to_string(),
+      role: UserRole::RegularUser,
+      exp: 1234567890,
+    };
+
+    let token = jsonwebtoken::encode(
+      &jsonwebtoken::Header::default(),
+      &user_info_claim,
+      &jsonwebtoken::EncodingKey::from_secret("your_secret_key".as_ref()),
+    )
+    .expect("Failed to encode JWT");
+
+    env::set_var("SECRET_KEY", "your_secret_key");
+
+    let resend_verification_claim = ResendVerificationClaim {
+      email: "test@email.ntou.edu.tw".to_string(),
+      verification_token: "verificationtoken".to_string(),
+      expiration: 1234567890,
+      exp: 1234567890,
+    };
+
+    let token = jsonwebtoken::encode(
+      &jsonwebtoken::Header::default(),
+      &resend_verification_claim,
+      &jsonwebtoken::EncodingKey::from_secret("your_secret_key".as_ref()),
+    )
+    .expect("Failed to encode JWT");
+  }
+}

@@ -131,3 +131,67 @@ fn date_from_string(date: &str) -> Result<NaiveDate, Status> {
     &format!("Parsing date from str '{}'", date),
   )
 }
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+  use sqlx::sqlite::SqlitePool;
+  use tempdir::TempDir;
+
+  #[tokio::test]
+  async fn test_start() {
+    let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
+
+    let delete_logfile_mock = mockito::mock("DELETE_LOGFILE_MOCK");
+
+    let set_unavailable_timeslots_mock = mockito::mock("SET_UNAVAILABLE_TIMESLOTS_MOCK");
+
+    mockito::expect!(delete_logfile_mock);
+    mockito::expect!(set_unavailable_timeslots_mock);
+
+    start(&pool).await;
+
+    mockito::verify!(delete_logfile_mock);
+    mockito::verify!(set_unavailable_timeslots_mock);
+  }
+
+  #[test]
+  fn test_delete_logfile() {
+    let temp_dir = TempDir::new("logs").unwrap();
+
+    let old_log = temp_dir.path().join("old.log");
+    fs::write(&old_log, "old log content").unwrap();
+
+    let new_log = temp_dir.path().join("new.log");
+    fs::write(&new_log, "new log content").unwrap();
+
+    std::env::set_var("ROOT", temp_dir.path());
+
+    delete_logfile();
+
+    assert!(!old_log.exists());
+    assert!(new_log.exists());
+  }
+
+  #[tokio::test]
+  async fn test_set_unavailable_timeslots() {
+    let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
+
+    let insert_mock = mockito::mock("INSERT");
+
+    mockito::expect!(insert_mock);
+
+    set_unavailable_timeslots(&pool).await;
+
+    mockito::verify!(insert_mock);
+  }
+
+  #[test]
+  fn test_date_from_string() {
+    let valid_date = "2022-01-01";
+    let invalid_date = "abc";
+
+    assert!(date_from_string(valid_date).is_ok());
+    assert!(date_from_string(invalid_date).is_err());
+  }
+}

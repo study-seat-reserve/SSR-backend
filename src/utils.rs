@@ -274,3 +274,131 @@ pub fn create_resend_verification_token(
 
   Ok(token)
 }
+
+#[cfg(test)]
+mod tests {
+
+  use crate::model::token::{Claim, ResendVerificationClaim, UserInfoClaim};
+
+  use super::*;
+
+  // test_handle
+
+  #[test]
+  fn test_handle_not_found_error() {
+    let result = Err::<i32, IoError>(IoError::new(ErrorKind::NotFound, "Not found"));
+    let prefix = "Test";
+    let handled_result = handle(result, prefix);
+
+    assert_eq!(handled_result.unwrap_err(), Status::NotFound);
+
+    // permission denied error
+    let result = Err::<i32, IoError>(IoError::new(
+      ErrorKind::PermissionDenied,
+      "Permission denied",
+    ));
+    let prefix = "Test";
+    let handled_result = handle(result, prefix);
+
+    assert_eq!(handled_result.unwrap_err(), Status::Forbidden);
+
+    //connection refused error
+    let result = Err::<i32, IoError>(IoError::new(
+      ErrorKind::ConnectionRefused,
+      "Connection refused",
+    ));
+    let prefix = "Test";
+    let handled_result = handle(result, prefix);
+
+    assert_eq!(handled_result.unwrap_err(), Status::ServiceUnavailable);
+  }
+
+  #[test]
+  fn test_handle_other_error() {
+    let result = Err::<i32, IoError>(IoError::new(ErrorKind::Other, "Other"));
+    let prefix = "Test";
+    let handled_result = handle(result, prefix);
+
+    assert_eq!(handled_result.unwrap_err(), Status::InternalServerError);
+  }
+
+  #[test]
+  fn test_get_root() {
+    env::set_var("ROOT", "/app");
+    assert_eq!(get_root(), "/app");
+  }
+
+  #[test]
+  #[should_panic(expected = "Failed to get root path")]
+  fn test_get_root_miss() {
+    env::remove_var("ROOT");
+    let _ = get_root();
+  }
+
+  #[test]
+  fn test_get_base_url() {
+    env::set_var("BASE_URL", "https://api.example.com");
+    assert_eq!(get_base_url(), "https://api.example.com");
+  }
+
+  #[test]
+  #[should_panic(expected = "Failed to get base url")]
+  fn test_get_base_url_miss() {
+    env::remove_var("BASE_URL");
+    let _ = get_base_url();
+  }
+
+  #[test]
+  fn test_send_verification_email() {
+    let user_email = "test@example.com";
+    let verification_token = "token123";
+
+    env::set_var("EMAIL_ADDRESS", "mybot@example.com");
+    env::set_var("EMAIL_PASSWORD", "123456");
+    env::set_var("EMAIL_DOMAIN", "example.com");
+
+    let result = send_verification_email(user_email, verification_token);
+    assert!(result.is_ok());
+
+    env::remove_var("EMAIL_ADDRESS");
+    let result = send_verification_email(user_email, verification_token);
+    assert!(result.is_err());
+  }
+
+  #[test]
+  fn test_create_userinfo_token() {
+    let user_name = "testuser";
+    let user_role = user::UserRole::RegularUser;
+
+    env::set_var("SECRET_KEY", "mysecretkey");
+
+    let token = create_userinfo_token(&user_name, user_role).unwrap();
+    assert!(!token.is_empty());
+
+    let claims = UserInfoClaim::verify_jwt(&token).unwrap();
+    assert_eq!(claims.user, user_name);
+    assert_eq!(claims.role, user_role);
+
+    env::remove_var("SECRET_KEY");
+    let result = create_userinfo_token(&user_name, user_role);
+    assert!(result.is_err());
+  }
+
+  #[test]
+  fn test_create_resend_verification_token() {
+    let email = "test@example.com";
+    let verification_token = "token123";
+
+    env::set_var("SECRET_KEY", "mysecretkey");
+
+    let token = create_resend_verification_token(&email, &verification_token, true).unwrap();
+
+    let claims = ResendVerificationClaim::verify_jwt(&token).unwrap();
+    assert_eq!(claims.email, email);
+    assert_eq!(claims.verification_token, verification_token);
+
+    env::remove_var("SECRET_KEY");
+    let result = create_resend_verification_token(&email, &verification_token, true);
+    assert!(result.is_err());
+  }
+}
