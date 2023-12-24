@@ -8,7 +8,7 @@ pub struct Reservation {
 }
 
 #[derive(Debug, Deserialize, Serialize, Validate)]
-#[validate(schema(function = "validate_reservation", skip_on_field_errors = false))]
+#[validate(schema(function = "validate_reservation_request", skip_on_field_errors = false))]
 pub struct InsertReservationRequest {
   #[validate(custom = "validate_seat_id")]
   pub seat_id: u16,
@@ -17,7 +17,7 @@ pub struct InsertReservationRequest {
 }
 
 #[derive(Debug, Deserialize, Serialize, Validate)]
-#[validate(schema(function = "validate_update_reservation", skip_on_field_errors = false))]
+#[validate(schema(function = "validate_update_reservation_request", skip_on_field_errors = false))]
 pub struct UpdateReservationRequest {
   pub start_time: i64,
   pub end_time: i64,
@@ -26,13 +26,13 @@ pub struct UpdateReservationRequest {
 }
 
 #[derive(Debug, Deserialize, Serialize, Validate)]
-#[validate(schema(function = "validate_delete_reservation", skip_on_field_errors = false))]
+#[validate(schema(function = "validate_delete_reservation_request", skip_on_field_errors = false))]
 pub struct DeleteReservationRequest {
   pub start_time: i64,
   pub end_time: i64,
 }
 
-fn validate_reservation(request: &InsertReservationRequest) -> Result<(), ValidationError> {
+fn validate_reservation_request(request: &InsertReservationRequest) -> Result<(), ValidationError> {
   let start_time: i64 = request.start_time;
   let end_time: i64 = request.end_time;
 
@@ -67,7 +67,7 @@ impl FromRow<'_, SqliteRow> for Reservation {
   }
 }
 
-fn validate_update_reservation(request: &UpdateReservationRequest) -> Result<(), ValidationError> {
+fn validate_update_reservation_request(request: &UpdateReservationRequest) -> Result<(), ValidationError> {
   let start_time = request.start_time;
   let end_time = request.end_time;
   let new_start_time = request.new_start_time;
@@ -78,7 +78,7 @@ fn validate_update_reservation(request: &UpdateReservationRequest) -> Result<(),
   on_the_same_day(start_time, new_start_time)
 }
 
-fn validate_delete_reservation(request: &DeleteReservationRequest) -> Result<(), ValidationError> {
+fn validate_delete_reservation_request(request: &DeleteReservationRequest) -> Result<(), ValidationError> {
   let start_time = request.start_time;
   let end_time = request.end_time;
 

@@ -119,8 +119,19 @@ pub async fn login(
   }
 
   if !&user_info.verified {
-    log::warn!("The user's email has not been verified.");
+    log::warn!("The user's email has not been verified");
     return Err(Status::BadRequest);
+  }
+
+  let is_in_blacklist =
+    database::user::is_user_in_blacklist(pool.inner(), &user_info.user_name).await?;
+
+  if is_in_blacklist {
+    log::warn!(
+      "User '{}' is currently in the blacklist.",
+      &user_info.user_name
+    );
+    return Err(Status::Forbidden);
   }
 
   let token = create_userinfo_token(&user_info.user_name, user_info.user_role)
@@ -446,8 +457,69 @@ pub async fn set_seat_availability(
   Ok(())
 }
 
-/*
-管理者設定unavaliable time slot
-管理者設定座位avaliable
-黑名單
-*/
+// 設定黑名單
+#[post("/api/set_blacklist", format = "json", data = "<ban_request>")]
+pub async fn add_user_to_blacklist(
+  pool: &State<Pool<Sqlite>>,
+  claims: token::UserInfoClaim,
+  ban_request: Json<user::BanRequest>,
+) -> Result<(), Status> {
+  handle_validator(ban_request.validate())?;
+
+  let user_name = claims.user;
+  if claims.role != user::UserRole::Admin {
+    log::warn!(
+      "Unauthorized attempt to add user to blacklist by user: {}",
+      &user_name
+    );
+    return Err(Status::Unauthorized);
+  }
+
+  let user_name_to_ban = &ban_request.user_name;
+  let start_time = ban_request.start_time;
+  let end_time = ban_request.end_time;
+
+  log::info!(
+    "Adding user to blacklist with start_time: {:?}, end_time: {:?}",
+    start_time,
+    end_time
+  );
+
+  let is_user_in_blacklist =
+    database::user::is_user_in_blacklist(pool.inner(), user_name_to_ban).await?;
+  if is_user_in_blacklist {
+    database::user::delete_user_from_blacklist(pool.inner(), user_name_to_ban).await?;
+  }
+
+  database::user::insert_user_to_blacklist(pool.inner(), user_name_to_ban, start_time, end_time)
+    .await?;
+
+  log::info!("Add user to blacklist successfully");
+  Ok(())
+}
+
+// 將使用者移除黑名單
+#[post("/api/remove_blacklist", format = "json", data = "<unban_request>")]
+pub async fn remove_user_from_blacklist(
+  pool: &State<Pool<Sqlite>>,
+  claims: token::UserInfoClaim,
+  unban_request: Json<user::UnBanRequest>,
+) -> Result<(), Status> {
+  let user_name = claims.user;
+  if claims.role != user::UserRole::Admin {
+    log::warn!(
+      "Unauthorized attempt to remove user from blacklist by user: {}",
+      &user_name
+    );
+    return Err(Status::Unauthorized);
+  }
+
+  let user_name_to_unban = &unban_request.user_name;
+
+  log::info!("Removing user from blacklist");
+
+  database::user::delete_user_from_blacklist(pool.inner(), user_name_to_unban).await?;
+
+  log::info!("Remove user from blacklist successfully");
+  Ok(())
+}

@@ -16,8 +16,6 @@ use rocket::{
   routes, {Request, Response},
 };
 
-use utils::*;
-
 pub struct CORS;
 
 #[rocket::async_trait]
@@ -115,7 +113,9 @@ async fn main() {
     email_verify,
     resend_verification_email,
     set_unavailable_timeslots,
-    set_seat_availability
+    set_seat_availability,
+    add_user_to_blacklist,
+    remove_user_from_blacklist,
   ];
   let server = rocket::build()
     .register("/", catchers)

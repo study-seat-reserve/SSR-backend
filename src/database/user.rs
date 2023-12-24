@@ -75,3 +75,90 @@ pub async fn update_user_verified_by_token(
 
   Ok(())
 }
+
+pub async fn insert_user_to_blacklist(
+  pool: &Pool<Sqlite>,
+  user_name: &str,
+  start_time: i64,
+  end_time: i64,
+) -> Result<(), Status> {
+  let result = handle_sqlx(
+    query!(
+      "INSERT INTO BlackList
+        (user_name, start_time, end_time)
+      VALUES 
+        (
+          ?, 
+          datetime(?, 'unixepoch', '+8 hours'), 
+          datetime(?, 'unixepoch', '+8 hours')
+        )",
+      user_name,
+      start_time,
+      end_time
+    )
+    .execute(pool)
+    .await,
+    "Inserting user to balck list",
+  )?;
+
+  let affected_rows = result.rows_affected();
+
+  if affected_rows == 0 {
+    log::warn!("No insert operation was executed");
+    return Err(Status::NotFound);
+  }
+
+  Ok(())
+}
+
+pub async fn delete_user_from_blacklist(
+  pool: &Pool<Sqlite>,
+  user_name: &str,
+) -> Result<(), Status> {
+  let result = handle_sqlx(
+    query!(
+      "DELETE FROM BlackList
+      WHERE
+        user_name = ? ",
+      user_name,
+    )
+    .execute(pool)
+    .await,
+    "Deleting user from balck list",
+  )?;
+
+  let affected_rows = result.rows_affected();
+
+  if affected_rows == 0 {
+    log::warn!("No delete operation was executed from BlackList");
+    return Err(Status::NotFound);
+  }
+
+  Ok(())
+}
+
+pub async fn is_user_in_blacklist(pool: &Pool<Sqlite>, user_name: &str) -> Result<bool, Status> {
+  let now = naive_datetime_to_timestamp(get_now()).unwrap();
+
+  let result = handle_sqlx(
+    query_scalar!(
+      "SELECT EXISTS(
+        SELECT 1 FROM BlackList
+        WHERE 
+          user_name = ? AND 
+          start_time <= datetime(?, 'unixepoch', '+8 hours') AND 
+          end_time > datetime(?, 'unixepoch', '+8 hours')
+      )",
+      user_name,
+      now,
+      now
+    )
+    .fetch_one(pool)
+    .await,
+    "Checking if the user is currently listed in the blacklist",
+  )?;
+
+  let is_within_blacklist: bool = result.map_or(false, |count| count != 0);
+
+  Ok(is_within_blacklist)
+}
