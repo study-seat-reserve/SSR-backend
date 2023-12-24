@@ -135,6 +135,7 @@ fn date_from_string(date: &str) -> Result<NaiveDate, Status> {
 #[cfg(test)]
 mod tests {
   use super::*;
+  use mockito;
   use sqlx::sqlite::SqlitePool;
   use tempdir::TempDir;
 
@@ -142,17 +143,17 @@ mod tests {
   async fn test_start() {
     let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
 
-    let delete_logfile_mock = mockito::mock("DELETE_LOGFILE_MOCK");
+    let delete_logfile_mock = mockito::mock("DELETE_LOGFILE_MOCK").expect(1);
 
-    let set_unavailable_timeslots_mock = mockito::mock("SET_UNAVAILABLE_TIMESLOTS_MOCK");
+    let set_unavailable_timeslots_mock = mockito::mock("SET_UNAVAILABLE_TIMESLOTS_MOCK").expect(1);
 
     mockito::expect!(delete_logfile_mock);
     mockito::expect!(set_unavailable_timeslots_mock);
 
     start(&pool).await;
 
-    mockito::verify!(delete_logfile_mock);
-    mockito::verify!(set_unavailable_timeslots_mock);
+    delete_logfile_mock.assert();
+    set_unavailable_timeslots_mock.assert();
   }
 
   #[test]
