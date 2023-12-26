@@ -1,4 +1,5 @@
 /target
 .env
+.env.release
 logfiles
 *.db3
