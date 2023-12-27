@@ -7,3 +7,10 @@ log_level = "normal"
 limits = { forms = 1073741824, form = 1073741824, file = 1073741824, data-form = 1073741824 }
 shutdown = { ctrlc = "true", force = "true" }
 # tls = "disabled"
+
+[release]
+address = "0.0.0.0"
+port = 8002
+log_level = "normal"
+limits = { forms = 1073741824, form = 1073741824, file = 1073741824, data-form = 1073741824 }
+shutdown = { ctrlc = "true", force = "true" }

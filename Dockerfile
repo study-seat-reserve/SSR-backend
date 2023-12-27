@@ -37,6 +37,7 @@ RUN apt-get update && apt-get install -y openssl libssl1.1 && rm -rf /var/lib/ap
 # 複製執行檔和資料庫檔案
 COPY --from=builder /usr/src/study_seat_reserve/target/release/study_seat_reserve /usr/src/study_seat_reserve/study_seat_reserve
 COPY --from=builder /usr/src/study_seat_reserve/SSR.db3 /usr/src/study_seat_reserve/SSR.db3
+COPY Rocket.toml /usr/src/study_seat_reserve/Rocket.toml
 
 WORKDIR /usr/src/study_seat_reserve
 
