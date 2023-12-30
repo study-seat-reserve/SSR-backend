@@ -65,7 +65,7 @@ mod tests {
   #[test]
   fn test_seat_serial_deserial() {
     let seat = Seat {
-      seat_id: 65535, // Maximum u16 value
+      seat_id: 109, // Maximum u16 value
       available: true,
       other_info: Some("Extra information".to_string()),
     };
@@ -77,15 +77,16 @@ mod tests {
   }
 
   #[test]
-  fn test_seat_default() {
+  fn test_seat() {
     let seat = Seat {
-      seat_id: 42,
+      seat_id: 109,
       available: true,
       other_info: None,
     };
 
     assert_eq!(seat.other_info, None);
   }
+
   #[test]
   fn test_to_string() {
     let status = Status::Available;
@@ -116,10 +117,11 @@ mod tests {
   #[test]
   fn test_seat_availability() {
     let request = SeatAvailabilityRequest {
-      seat_id: 1,
+      seat_id: 109,
       available: true,
     };
     assert!((&request).validate().is_ok());
+
     let request = SeatAvailabilityRequest {
       seat_id: 0,
       available: true,
@@ -127,7 +129,7 @@ mod tests {
     assert!((&request).validate().is_err());
 
     let request = SeatAvailabilityRequest {
-      seat_id: 500,
+      seat_id: 218,
       available: true,
     };
     assert!((&request).validate().is_err());

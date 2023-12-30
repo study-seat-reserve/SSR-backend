@@ -624,7 +624,7 @@ mod tests {
   }
 
   #[tokio::test]
-  async fn test_show_current_seats_status_success() {
+  async fn test_show_current_seats_status() {
     let result = show_current_seats_status().await;
 
     assert!(result.is_ok());

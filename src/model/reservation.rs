@@ -97,10 +97,11 @@ mod tests {
     let now = get_now();
     let start_time =
       naive_date_to_timestamp(now.date(), now.hour(), now.minute(), now.second()).unwrap();
-    let end_time = start_time + 3600;
+    let end_time =
+      naive_date_to_timestamp(now.date(), now.hour() + 1, now.minute(), now.second()).unwrap();
 
     let request = InsertReservationRequest {
-      seat_id: 1,
+      seat_id: 109,
       start_time,
       end_time,
     };
@@ -109,10 +110,11 @@ mod tests {
 
     let start_time =
       naive_date_to_timestamp(now.date(), now.hour(), now.minute(), now.second()).unwrap();
-    let end_time = start_time - 3600;
+    let end_time =
+      naive_date_to_timestamp(now.date(), now.hour() - 1, now.minute(), now.second()).unwrap();
 
     let request = InsertReservationRequest {
-      seat_id: 1,
+      seat_id: 109,
       start_time,
       end_time,
     };
@@ -122,14 +124,18 @@ mod tests {
 
   #[test]
   fn test_validate_update_reservation() {
+    // Valid
     let now = get_now();
 
     let start_time =
       naive_date_to_timestamp(now.date(), now.hour(), now.minute(), now.second()).unwrap();
-    let end_time = start_time + 3600;
+    let end_time =
+      naive_date_to_timestamp(now.date(), now.hour() + 1, now.minute(), now.second()).unwrap();
 
-    let new_start_time = start_time + 7200;
-    let new_end_time = new_start_time + 3600;
+    let new_start_time =
+      naive_date_to_timestamp(now.date(), now.hour() + 2, now.minute(), now.second()).unwrap();
+    let new_end_time =
+      naive_date_to_timestamp(now.date(), now.hour() + 3, now.minute(), now.second()).unwrap();
 
     let request = UpdateReservationRequest {
       start_time,
@@ -140,16 +146,19 @@ mod tests {
 
     assert!(validate_update_reservation(&request).is_ok());
 
+    // Invalid
     let now = get_now();
     let tomorrow = now.date() + chrono::Duration::days(1);
 
     let start_time =
       naive_date_to_timestamp(now.date(), now.hour(), now.minute(), now.second()).unwrap();
-    let end_time = start_time + 3600;
+    let end_time =
+      naive_date_to_timestamp(now.date(), now.hour() + 1, now.minute(), now.second()).unwrap();
 
     let new_start_time =
       naive_date_to_timestamp(tomorrow, now.hour(), now.minute(), now.second()).unwrap();
-    let new_end_time = new_start_time + 3600;
+    let new_end_time =
+      naive_date_to_timestamp(tomorrow, now.hour() + 1, now.minute(), now.second()).unwrap();
 
     let request = UpdateReservationRequest {
       start_time,
@@ -163,12 +172,13 @@ mod tests {
 
   #[test]
   fn test_validate_delete_reservation() {
-    // valid case
+    // Valid
     let now = get_now();
 
     let start_time =
       naive_date_to_timestamp(now.date(), now.hour(), now.minute(), now.second()).unwrap();
-    let end_time = start_time + 3600;
+    let end_time =
+      naive_date_to_timestamp(now.date(), now.hour() + 1, now.minute(), now.second()).unwrap();
 
     let request = DeleteReservationRequest {
       start_time,
@@ -177,12 +187,13 @@ mod tests {
 
     assert!(validate_delete_reservation(&request).is_ok());
 
-    // invalid case
+    // Invalid
     let now = get_now();
 
     let start_time =
       naive_date_to_timestamp(now.date(), now.hour(), now.minute(), now.second()).unwrap();
-    let end_time = start_time - 3600;
+    let end_time =
+      naive_date_to_timestamp(now.date(), now.hour() - 1, now.minute(), now.second()).unwrap();
 
     let request = DeleteReservationRequest {
       start_time,

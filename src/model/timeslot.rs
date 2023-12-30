@@ -16,17 +16,15 @@ fn validate_timeslot(timeslot: &TimeSlot) -> Result<(), ValidationError> {
 
 #[cfg(test)]
 mod tests {
-
+  use super::*;
+  use crate::utils::{get_now, naive_date_to_timestamp};
   use chrono::Timelike;
 
-  use crate::utils::{get_now, naive_date_to_timestamp};
-
-  use super::*;
-
   #[test]
-  fn test_validate_timeslot_success() {
-    let start_time = 1658401200; // 2023-07-20 10:00:00
-    let end_time = 1658424000; // 2023-07-20 14:00:00
+  fn test_validate_timeslot() {
+    //結束時間晚於開始時間
+    let start_time = 1658401200;
+    let end_time = 1658424000;
 
     let timeslot = TimeSlot {
       start_time,
@@ -34,9 +32,9 @@ mod tests {
     };
 
     assert!(validate_timeslot(&timeslot).is_ok());
-
-    let start_time = 1658424000; // 2023-07-20 14:00:00
-    let end_time = 1658401200; // 2023-07-20 10:00:00
+    //結束時間早於開始時間
+    let start_time = 1658424000;
+    let end_time = 1658401200;
 
     let timeslot = TimeSlot {
       start_time,
@@ -45,6 +43,7 @@ mod tests {
 
     assert!(validate_timeslot(&timeslot).is_err());
 
+    // 開始時間早於現在
     let now = get_now();
     let start_time =
       naive_date_to_timestamp(now.date(), now.hour(), now.minute() - 10, now.second()).unwrap();

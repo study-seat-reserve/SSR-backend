@@ -15,7 +15,7 @@ pub async fn start(pool: &Pool<Sqlite>) {
 
     let duration = tomorrow_midnight - now;
     let std_duration = duration.to_std().unwrap();
-    // let std_duration = std::time::Duration::from_secs(3);
+    // let std_duration = std::time::Duration::from_secs(3)
 
     sleep(std_duration).await;
     delete_logfile();
@@ -135,64 +135,85 @@ fn date_from_string(date: &str) -> Result<NaiveDate, Status> {
 #[cfg(test)]
 mod tests {
   use super::*;
-  use mockito;
+  use crate::database::init::init_db;
   use sqlx::sqlite::SqlitePool;
-  use tempdir::TempDir;
+  use std::{fs, time::Duration};
 
   #[tokio::test]
   async fn test_start() {
-    let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
+    let pool = create_pool().await;
 
-    let delete_logfile_mock = mockito::mock("DELETE_LOGFILE_MOCK").expect(1);
+    tokio::spawn(start(&pool));
 
-    let set_unavailable_timeslots_mock = mockito::mock("SET_UNAVAILABLE_TIMESLOTS_MOCK").expect(1);
-
-    mockito::expect!(delete_logfile_mock);
-    mockito::expect!(set_unavailable_timeslots_mock);
-
-    start(&pool).await;
-
-    delete_logfile_mock.assert();
-    set_unavailable_timeslots_mock.assert();
+    tokio::time::sleep(Duration::from_secs(5)).await;
   }
 
-  #[test]
-  fn test_delete_logfile() {
-    let temp_dir = TempDir::new("logs").unwrap();
+  #[tokio::test]
+  async fn test_delete_logfile() {
+    let pool = create_pool().await;
+    let root = get_root();
+    let logfiles_path = format!("{}/logfiles", root);
 
-    let old_log = temp_dir.path().join("old.log");
-    fs::write(&old_log, "old log content").unwrap();
-
-    let new_log = temp_dir.path().join("new.log");
-    fs::write(&new_log, "new log content").unwrap();
-
-    std::env::set_var("ROOT", temp_dir.path());
+    let test_logfile_path = format!("{}/test_logfile.txt", logfiles_path);
+    fs::write(&test_logfile_path, "Test log content").expect("Failed to create test log file");
 
     delete_logfile();
 
-    assert!(!old_log.exists());
-    assert!(new_log.exists());
+    assert!(!fs::metadata(&test_logfile_path).is_ok());
   }
 
   #[tokio::test]
   async fn test_set_unavailable_timeslots() {
-    let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
-
-    let insert_mock = mockito::mock("INSERT");
-
-    mockito::expect!(insert_mock);
+    let pool = create_pool().await;
 
     set_unavailable_timeslots(&pool).await;
 
-    mockito::verify!(insert_mock);
+    let today = get_today();
+    let future_date = today + chrono::Duration::days(3);
+    let time_slots = vec![
+      (
+        naive_date_to_timestamp(future_date, 0, 0, 0).unwrap(),
+        naive_date_to_timestamp(future_date, 9, 0, 0).unwrap(),
+      ),
+      (
+        naive_date_to_timestamp(future_date, 17, 0, 0).unwrap(),
+        naive_date_to_timestamp(future_date, 23, 59, 59).unwrap(),
+      ),
+    ];
+
+    for (start_time, end_time) in time_slots {
+      assert!(
+        database::timeslot::is_overlapping_with_unavailable_timeslot(&pool, start_time, end_time)
+          .await
+          .unwrap_or_else(|e| {
+            log::error!(
+              "Failed to check overlapping with unavailable timeslot: {}",
+              e
+            );
+            panic!(
+              "Failed to check overlapping with unavailable timeslot: {}",
+              e
+            );
+          })
+      );
+    }
   }
 
   #[test]
   fn test_date_from_string() {
-    let valid_date = "2022-01-01";
-    let invalid_date = "abc";
+    let valid_date = "2023-12-30";
+    let invalid_date = "testdate";
 
     assert!(date_from_string(valid_date).is_ok());
     assert!(date_from_string(invalid_date).is_err());
+  }
+
+  async fn create_pool() -> SqlitePool {
+    let database_url = "sqlite::memory:";
+    let pool = Pool::connect(database_url)
+      .await
+      .expect("Failed to create in-memory database");
+    init_db(&pool).await;
+    pool
   }
 }

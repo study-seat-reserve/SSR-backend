@@ -29,7 +29,8 @@ sqlx = { version = "0.7", features = [
     "chrono",
 ] }
 rusqlite = "0.30"
-mockito = "1.1.1"]
+mockito = "1.1.1"
 tempdir = "0.3.7"
+
 [profile.dev]
 debug = true

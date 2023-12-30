@@ -16,8 +16,6 @@ use rocket::{
   routes, {Request, Response},
 };
 
-use utils::*;
-
 pub struct CORS;
 
 #[rocket::async_trait]
@@ -127,5 +125,23 @@ async fn main() {
   tokio::select! {
       _ = server => {},
       _ = tokio::signal::ctrl_c() => {},
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[tokio::test]
+  async fn test_info() {
+    let cors = CORS;
+
+    let info = cors.info();
+
+    match info.kind {
+      rocket::fairing::Kind::Response => (),
+      _ => panic!("Expected Kind::Response"),
+    }
+    assert_eq!(info.name, "Add CORS headers to responses");
   }
 }

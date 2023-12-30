@@ -52,18 +52,21 @@ mod tests {
   use chrono::Timelike;
 
   #[test]
-  fn test_validate_datetime_success() {
+  fn test_validate_datetime() {
+    // 測結束時間晚於開始時間
     let now = get_now();
     let start_time =
       naive_date_to_timestamp(now.date(), now.hour(), now.minute(), now.second()).unwrap();
-    let end_time = start_time + 3600;
+    let end_time =
+      naive_date_to_timestamp(now.date(), now.hour() + 1, now.minute(), now.second()).unwrap();
 
     assert!(validate_datetime(start_time, end_time).is_ok());
-
+    // 測結束時間早於開始時間
     let now = get_now();
     let start_time =
       naive_date_to_timestamp(now.date(), now.hour(), now.minute(), now.second()).unwrap();
-    let end_time = start_time - 3600;
+    let end_time =
+      naive_date_to_timestamp(now.date(), now.hour() - 1, now.minute(), now.second()).unwrap();
 
     assert!(validate_datetime(start_time, end_time).is_err());
 
@@ -80,17 +83,29 @@ mod tests {
 
   #[test]
   fn test_on_the_same_day() {
-    // today
+    // 測開始時間結束時間皆為今天
     let now = get_now();
 
     let start_time =
       naive_date_to_timestamp(now.date(), now.hour(), now.minute(), now.second()).unwrap();
-    let end_time = start_time + 3600;
+    let end_time =
+      naive_date_to_timestamp(now.date(), now.hour() + 1, now.minute(), now.second()).unwrap();
 
     assert!(on_the_same_day(start_time, end_time).is_ok());
-    // not today
+
+    // 測開始時間為今天 結束時間為明天
     let now = get_now();
     let tomorrow = now.date() + chrono::Duration::days(1);
+
+    let start_time =
+      naive_date_to_timestamp(now.date(), now.hour(), now.minute(), now.second()).unwrap();
+    let end_time =
+      naive_date_to_timestamp(tomorrow, now.hour(), now.minute(), now.second()).unwrap();
+
+    assert!(on_the_same_day(start_time, end_time).is_err());
+
+    let now = get_now();
+    let tomorrow = now.date() - chrono::Duration::days(1);
 
     let start_time =
       naive_date_to_timestamp(now.date(), now.hour(), now.minute(), now.second()).unwrap();
@@ -102,11 +117,11 @@ mod tests {
 
   #[test]
   fn test_validate_seat_id() {
-    let seat_id = 100;
-    assert!(validate_seat_id(seat_id).is_ok());
-
     let seat_id = 0;
     assert!(validate_seat_id(seat_id).is_err());
+
+    let seat_id = 109;
+    assert!(validate_seat_id(seat_id).is_ok());
 
     let seat_id = 218;
     assert!(validate_seat_id(seat_id).is_err());

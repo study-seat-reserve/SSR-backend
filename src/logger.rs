@@ -64,3 +64,31 @@ fn remove_ansi_escape_codes(s: &str) -> String {
     .to_string()
 }
 
+#[cfg(test)]
+mod tests {
+  use super::*;
+  use tempdir::TempDir;
+
+  #[test]
+  fn test_init_logger() {
+    let temp_dir = TempDir::new("logfiles").expect("Failed to create temp directory");
+    let temp_path = temp_dir.path();
+
+    env::set_var("ROOT", temp_path);
+
+    init_logger(LevelFilter::Info);
+
+    let file_name = format!("{}/{}.txt", temp_path.display(), Local::now().timestamp());
+
+    assert!(Path::new(&file_name).exists());
+
+    temp_dir.close().expect("Failed to close temp directory");
+  }
+
+  #[test]
+  fn test_remove_ansi_escape_codes() {
+    let input = "\x1B[31mtest\x1B[0m";
+    let expected = "test";
+    assert_eq!(remove_ansi_escape_codes(input), expected);
+  }
+}

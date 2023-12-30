@@ -13,7 +13,7 @@ pub struct RegisterRequest {
   pub email: String,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct UserInfo {
   pub user_name: String,
   pub password_hash: String,
@@ -119,15 +119,12 @@ fn validate_username(user_name: &str) -> Result<(), ValidationError> {
 mod tests {
   use super::*;
   use regex::Regex;
-  use sqlx::{
-    sqlite::{SqliteValue, SqliteValueRef},
-    ValueRef,
-  };
+  use sqlx::sqlite;
   use std::str::FromStr;
 
-  // Test RegisterRequest validation
   #[test]
   fn test_register_request() {
+    // Valid
     let valid_request = RegisterRequest {
       user_name: "testuser".to_string(),
       password: "testpassword".to_string(),
@@ -136,8 +133,9 @@ mod tests {
 
     assert!(valid_request.validate().is_ok());
 
+    // Invalid
     let invalid_username_request = RegisterRequest {
-      user_name: "!test_user".to_string(),
+      user_name: "!testuser".to_string(),
       password: "testpassword".to_string(),
       email: "test@email.ntou.edu.tw".to_string(),
     };
@@ -145,7 +143,7 @@ mod tests {
 
     let invalid_password_request = RegisterRequest {
       user_name: "testuser".to_string(),
-      password: "short".to_string(),
+      password: "test".to_string(),
       email: "test@email.ntou.edu.tw".to_string(),
     };
     assert!(invalid_password_request.validate().is_err());
@@ -179,21 +177,49 @@ mod tests {
     assert!(admin_result.is_ok());
     assert_eq!(admin_result.unwrap(), UserRole::Admin);
 
-    let invalid_str = "NotAUserRole";
-    let invalid_result = UserRole::from_str(invalid_str);
-    assert!(invalid_result.is_err());
+    let test_str = "NotAUserRole";
+    let test_result = UserRole::from_str(test_str);
+    assert!(test_result.is_err());
   }
 
   // Test validate_username function
   #[test]
   fn test_validate_username() {
+    // Valid
     assert!(validate_username("testuser").is_ok());
     assert!(validate_username("testuser123").is_ok());
-    assert!(validate_username("testuser123").is_ok());
-
+    // Invalid
     assert!(validate_username("testuser!").is_err());
     assert!(validate_username("test user ").is_err());
   }
 
-  // Add more tests for other functions as needed
+  #[test]
+  fn test_login_request_validation() {
+    // Valid
+    let valid_request = LoginRequest {
+      user_name: "testuser".to_string(),
+      password: "validpassword".to_string(),
+    };
+
+    assert!(valid_request.validate().is_ok());
+
+    // Invalid username
+    let invalid_username_request = LoginRequest {
+      user_name: "!testuser!".to_string(),
+      password: "testpassword".to_string(),
+    };
+
+    assert!(invalid_username_request.validate().is_err());
+
+    // Invalid password
+    let invalid_password_request = LoginRequest {
+      user_name: "testuser".to_string(),
+      password: "test".to_string(),
+    };
+
+    assert!(invalid_password_request.validate().is_err());
+  }
+
+  #[test]
+  fn test_from_row() {}
 }

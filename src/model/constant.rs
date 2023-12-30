@@ -6,6 +6,8 @@ mod test {
 
   #[test]
   fn test_number_of_seats() {
+    assert_ne!(NUMBER_OF_SEATS, 216);
     assert_eq!(NUMBER_OF_SEATS, 217);
+    assert_ne!(NUMBER_OF_SEATS, 218);
   }
 }

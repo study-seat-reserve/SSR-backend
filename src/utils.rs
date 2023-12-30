@@ -282,8 +282,6 @@ mod tests {
 
   use super::*;
 
-  // test_handle
-
   #[test]
   fn test_handle_not_found_error() {
     let result = Err::<i32, IoError>(IoError::new(ErrorKind::NotFound, "Not found"));
@@ -337,8 +335,8 @@ mod tests {
 
   #[test]
   fn test_get_base_url() {
-    env::set_var("BASE_URL", "https://api.example.com");
-    assert_eq!(get_base_url(), "https://api.example.com");
+    env::set_var("BASE_URL", "https://api.email.ntou.edu.tw");
+    assert_eq!(get_base_url(), "https://api.email.ntou.edu.tw");
   }
 
   #[test]
@@ -350,7 +348,7 @@ mod tests {
 
   #[test]
   fn test_send_verification_email() {
-    let user_email = "test@example.com";
+    let user_email = "test@email.ntou.edu.tw";
     let verification_token = "token123";
 
     env::set_var("EMAIL_ADDRESS", "mybot@example.com");
@@ -386,7 +384,7 @@ mod tests {
 
   #[test]
   fn test_create_resend_verification_token() {
-    let email = "test@example.com";
+    let email = "test@email.ntou.edu.tw";
     let verification_token = "token123";
 
     env::set_var("SECRET_KEY", "mysecretkey");
