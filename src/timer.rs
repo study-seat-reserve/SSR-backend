@@ -143,7 +143,7 @@ mod tests {
   async fn test_start() {
     let pool = create_pool().await;
 
-    tokio::spawn(start(&pool));
+    start(&pool);
 
     tokio::time::sleep(Duration::from_secs(5)).await;
   }

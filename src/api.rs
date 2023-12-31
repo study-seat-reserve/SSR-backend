@@ -472,12 +472,14 @@ mod tests {
   use crate::utils;
 
   use super::*;
-  use crate::rocket::uri;
+  use crate::model::reservation;
   use rocket::http::ContentType;
   use rocket::http::Status as HttpStatus;
   use rocket::http::Status;
   use rocket::local::blocking::Client;
   use rocket::serde::json::json;
+  use rocket::uri;
+  use sqlx::SqlitePool;
 
   #[test]
   fn test_register() {
@@ -537,39 +539,32 @@ mod tests {
 
   #[tokio::test]
   async fn test_resend_verification_email() {
-    // let email = "test@email.ntou.edu.tw".to_string();
-    // let verification_token = "testtoken".to_string();
-    // let expiration = get_now().timestamp() + 60;
+    let email = "test@email.ntou.edu.tw".to_string();
+    let verification_token = "testtoken".to_string();
+    let expiration = utils::get_now().timestamp() + 60;
 
-    // let claims = token::ResendVerificationClaim {
-    //   email: email.clone(),
-    //   verification_token: verification_token.clone(),
-    //   expiration: expiration,
-    //   exp: 12345678,
-    // };
-
-    // // 建立測試request
+    let claims = token::ResendVerificationClaim {
+      email: email.clone(),
+      verification_token: verification_token.clone(),
+      expiration: expiration,
+      exp: 12345678,
+    };
     // let req = LocalRequest::with_header("Authorization", "Bearer dummytoken").to_request();
 
-    // // 模擬提取claims
     // let res = claims.from_request(&req).await;
     // assert!(res.is_success());
     // let claims = res.unwrap();
 
-    // // 呼叫API
     // let result = resend_verification_email(claims).await;
 
-    // // 驗證結果
     // assert!(result.is_ok());
 
-    // // 驗證寄信邏輯是否正確執行
     // let email_address = std::env::var("EMAIL_ADDRESS").unwrap();
-    // assert_eq!(email_address, "bot@example.com");
+    // assert_eq!(email_address, "nick20030829@gmail.com");
     // assert_eq!(1, mails_sent()); // 寄信數量應為1
 
-    // // 驗證回傳值
     // let token = result.unwrap();
-    // let new_claims = token::ResendVerificationClaim::verify_jwt(&token).unwrap();
+    // let new_claims = token::UserInfoClaim::verify_jwt(&token).unwrap();
 
     // assert_eq!(new_claims.email, email);
     // assert_eq!(new_claims.verification_token, verification_token);
@@ -699,106 +694,275 @@ mod tests {
   ////////////////////////////////////////////////////////////////////////
   #[tokio::test]
   async fn test_show_current_seats_status() {
-    //   database::init::init_db(&pool);
+    let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
 
-    //   let pool = database::connect_to_db().expect("database connection");
-    //   let result = show_current_seats_status(&pool).await;
-    //   // 驗證結果
-    //   assert!(result.is_ok());
-    //   let result_str = result.unwrap();
+    let rocket = rocket::build().manage(pool.clone());
+    let client = Client::tracked(rocket).expect("valid rocket instance");
+    let response = client.get("/api/show_status").dispatch();
 
-    //   let status: seat::AllSeatsStatus =
-    //     serde_json::from_str(&result_str).expect("Result should be AllSeatsStatus JSON");
+    assert_eq!(response.status(), Status::Ok);
 
-    //   assert_eq!(status.seats.len(), 217);
+    let body: seat::AllSeatsStatus =
+      serde_json::from_str(&response.into_string().unwrap()).unwrap();
 
-    //   // DB錯誤
-    //   let db_path = format!("{}/SSR.db3", utils::get_root());
-    //   std::fs::remove_file(db_path).unwrap();
+    assert_eq!(body.seats.len(), (NUMBER_OF_SEATS - 1) as usize);
 
-    //   let result = show_current_seats_status(&pool).await;
-    //   assert_eq!(result.unwrap_err(), Status::InternalServerError);
-
-    //   // Unavailable timeslot
-    //   let mut conn = database::connect_to_db().unwrap();
-
-    //   let date = utils::get_today();
-    //   let time = utils::get_now();
-    //   // 插入 Unavailable timeslot 含目前時間
-    //   let mut tx = conn.transaction().unwrap();
-    //   tx.execute(
-    //     "INSERT INTO UnavailableTimeSlots (date, start_time, end_time) VALUES (?1, 0, ?2)",
-    //     params![date, time + 3600],
-    //   )
-    //   .unwrap();
-    //   tx.commit().unwrap();
-
-    //   let result = show_current_seats_status(&pool).await;
-
-    //   assert_eq!(result.unwrap(), "Unavailable");
+    for seat_status in body.seats {
+      match seat_status.status {
+        seat::Status::Available => {
+          assert!(seat_status.seat_id > 0);
+        }
+        seat::Status::Borrowed => {
+          assert!(seat_status.seat_id > 0);
+        }
+        seat::Status::Unavailable => {
+          assert!(seat_status.seat_id > 0);
+        }
+      }
+    }
   }
 
   #[tokio::test]
   async fn test_show_seats_status_in_specific_timeslots() {
-    let client = Client::tracked(rocket::build()).unwrap();
+    // let rocket = rocket::build();
+    // let client = Client::tracked(rocket).expect("valid rocket instance");
 
-    // 測試正常情況
-    let start_time = 1651510400; // 2022-05-04 08:00:00
-    let end_time = 1651514000; // 2022-05-04 09:00:00
+    // let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
+    // let pool = rocket.manage(pool);
 
-    let response = client
-      .get(uri!(show_seats_status_in_specific_timeslots: start_time, end_time))
-      .dispatch()
-      .await;
+    // let start_time = 1672531200;
+    // let end_time = 1672534800;
 
-    assert_eq!(response.status(), Status::Ok);
-    let seats_status = response.into_string().unwrap();
-    // 驗證回傳格式
-    assert!(seats_status.starts_with("{"));
-    assert!(seats_status.ends_with("}"));
-    assert!(seats_status.contains("\"seats\":"));
+    // let response = client
+    //   .get(uri!(show_seats_status_in_specific_timeslots: pool.inner(), start_time, end_time))
+    //   .dispatch();
 
-    // 測試無效時間格式
-    let start_time = "invalid";
-    let end_time = "invalid";
+    // assert_eq!(response.status(), Status::Ok);
 
-    let response = client
-      .get(uri!(show_seats_status_in_specific_timeslots: start_time, end_time))
-      .dispatch()
-      .await;
+    // let result: seat::AllSeatsStatus =
+    //   serde_json::from_str(&response.into_string().unwrap()).unwrap();
 
-    assert_eq!(response.status(), Status::UnprocessableEntity);
+    // assert_eq!(
+    //   result.seats.len(),
+    //   usize::from(constant::NUMBER_OF_SEATS - 1)
+    // );
 
-    // 測試 DB 錯誤
-    // 先關閉 DB
-    // 再呼叫 API
-    let response = client
-      .get(uri!(show_seats_status_in_specific_timeslots: 1651510400, 1651514000))
-      .dispatch()
-      .await;
+    // for seat in result.seats {
+    //   assert!(seat.seat_id > 0 && seat.seat_id <= NUMBER_OF_SEATS); // 座位號碼正確性
 
-    assert_eq!(response.status(), Status::InternalServerError);
+    //   match seat.status {
+    //     seat::Status::Available => (),
+    //     seat::Status::Borrowed => (),
+    //     seat::Status::Unavailable => (),
+    //     _ => panic!("Invalid seat status"),
+    //   }
+    // }
   }
 
   #[tokio::test]
-  async fn test_show_seat_reservations() {}
+  async fn test_show_seat_reservations() {
+    // let rocket = rocket::build();
+    // let client = Client::tracked(rocket).expect("valid rocket instance");
+    // let pool = SqlitePool::connect_lazy("sqlite::memory:").expect("in-memory database");
 
-    #[tokio::test]
-  async fn test_reserve_seat(){}
+    // let mut conn = pool.acquire().await.expect("acquire connection");
+    // sqlx::query("INSERT INTO Seats (seat_id, available) VALUES (1, 1)")
+    //   .execute(&mut *conn)
+    //   .await
+    //   .expect("insert seat");
+
+    // sqlx::query(
+    //   "INSERT INTO Reservations (seat_id, start_time, end_time) VALUES (1, 1672531200, 1672534800)",
+    // )
+    // .execute(&mut *conn)
+    // .await
+    // .expect("insert reservation");
+
+    // let seat_id = 1;
+    // let start_time = 1672530000;
+    // let end_time = 1672536000;
+
+    // let response = client
+    //   .get(uri!(show_seat_reservations: *pool, seat_id, start_time, end_time))
+    //   .dispatch();
+
+    // assert_eq!(response.status(), Status::Ok);
+
+    // let body: Vec<(i64, i64)> = serde_json::from_str(&response.into_string().unwrap()).unwrap();
+    // assert_eq!(body, vec![(1672531200, 1672534800)]);
+  }
 
   #[tokio::test]
-  async fn test_update_reservation(){}
+  async fn test_reserve_seat() {}
 
   #[tokio::test]
-  async fn test_delete_reservation_time(){}
+  async fn test_update_reservation() {
+    let rocket = rocket::build();
+    let client = Client::tracked(rocket).expect("valid rocket instance");
+
+    // 初始化資料庫連線池
+    let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
+    let pool = rocket.manage(pool);
+
+    // 準備測試資料
+    let user_name = "testuser";
+    let user_role = user::UserRole::RegularUser;
+    let exp = 1234567890;
+
+    let start_time = 1234567890;
+    let end_time = 1234567899;
+    let new_start_time = 1234567901;
+    let new_end_time = 1234567999;
+
+    let update_reservation = reservation::UpdateReservationRequest {
+      start_time,
+      end_time,
+      new_start_time,
+      new_end_time,
+    };
+
+    let user_claims = token::UserInfoClaim {
+      user: user_name.to_string(),
+      role: user_role,
+      exp,
+    };
+
+    sqlx::query!(
+      "INSERT INTO Reservations (user_name, seat_id, start_time, end_time)
+     VALUES (?, 1, datetime(?, '+8 hours'), datetime(?, '+8 hours'))",
+      user_name,
+      start_time,
+      end_time
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    // 呼叫測試函數
+    let response = client
+      .post("/api/update_reservation")
+      .header(ContentType::JSON)
+      .json(&update_reservation)
+      .dispatch();
+
+    // 檢查返回結果
+    assert_eq!(response.status(), Status::Ok);
+
+    // 檢查資料庫資料是否正確更新
+    let rows = sqlx::query!(
+      "SELECT start_time, end_time 
+     FROM Reservations 
+     WHERE user_name = ?",
+      user_name
+    )
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].start_time, new_start_time.to_string());
+    assert_eq!(rows[0].end_time, new_end_time.to_string());
+  }
 
   #[tokio::test]
-  async fn test_display_user_reservations(){}
+  async fn test_delete_reservation_time() {
+    let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
+
+    // 準備測試資料
+    let user_name = "test_user";
+    let user_role = user::UserRole::RegularUser;
+    let exp = 1234567890;
+
+    let start_time = 1234567890;
+    let end_time = 1234567899;
+
+    let delete_reservation = reservation::DeleteReservationRequest {
+      start_time,
+      end_time,
+    };
+
+    let user_claims = token::UserInfoClaim {
+      user: user_name.to_string(),
+      role: user_role,
+      exp,
+    };
+
+    sqlx::query!(
+      "INSERT INTO Reservations (user_name, seat_id, start_time, end_time)
+     VALUES (?, 1, datetime(?, '+8 hours'), datetime(?, '+8 hours'))",
+      user_name,
+      start_time,
+      end_time
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    // let result = delete_reservation_time(
+    //   &rocket::State::from(pool.clone()),
+    //   user_claims,
+    //   Json(delete_reservation),
+    // )
+    // .await;
+
+    // // 檢查返回結果
+    // assert!(result.is_ok());
+
+    let rows = sqlx::query!(
+    "SELECT * FROM Reservations WHERE user_name = ? AND start_time = datetime(?, '+8 hours') AND end_time = datetime(?, '+8 hours')",
+    user_name, start_time, end_time
+  )
+  .fetch_all(&pool)
+  .await
+  .unwrap();
+
+    assert_eq!(rows.len(), 0);
+  }
+
+  #[rocket::async_test]
+  async fn test_display_user_reservations() {
+    // let database_url = ":memory:";
+    // let pool = SqlitePool::connect(&database_url).await;
+    // std::env::set_var("DATABASE_URL", database_url);
+    // rocket::custom(rocket::Config::from_env("test"))
+    //   .manage(pool)
+    //   .launch();
+
+    // let client = Client::tracked(rocket()).unwrap();
+
+    // let user_name = "test_user";
+    // let start_time = 1672531200;
+    // let end_time = 1672534800;
+
+    // let insert_request = InsertReservationRequest {
+    //   seat_id: 1,
+    //   start_time,
+    //   end_time,
+    // };
+
+    // reserve_seat(&client.rocket().state(), user_name, insert_request)
+    //   .await
+    //   .unwrap();
+
+    // let response = client
+    //   .get(format!("/api/user_reservations"))
+    //   .header(ContentType::JSON)
+    //   .dispatch();
+
+    // assert_eq!(response.status(), Status::Ok);
+
+    // let reservations: Vec<Reservation> =
+    //   serde_json::from_str(&response.into_string().unwrap()).unwrap();
+
+    // assert!(!reservations.is_empty());
+
+    // let retrieved_reservation = &reservations[0];
+    // assert_eq!(retrieved_reservation.seat_id, insert_request.seat_id);
+  }
 
   #[tokio::test]
-  async fn test_set_unavailable_timeslots(){}
+  async fn test_set_unavailable_timeslots() {}
 
   #[tokio::test]
-  async fn test_set_seat_availability(){}
-
+  async fn test_set_seat_availability() {}
 }

@@ -75,3 +75,38 @@ pub async fn update_user_verified_by_token(
 
   Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+
+  use super::*;
+
+  #[tokio::test]
+  async fn test_insert_new_user_info() {
+    let pool = Pool::connect("sqlite::memory:").await.unwrap();
+
+    sqlx::query("CREATE TABLE Users (id INTEGER PRIMARY KEY, name TEXT)")
+      .execute(&pool)
+      .await
+      .unwrap();
+
+    let user_info = user::UserInfo {
+      user_name: "testuser".to_string(),
+      password_hash: "testpassword".to_string(),
+      email: "test@email.ntou.edu.tw".to_string(),
+      user_role: user::UserRole::RegularUser,
+      verified: false,
+      verification_token: "randomtoken".to_string(),
+    };
+
+    insert_new_user_info(&pool, user_info).await.unwrap();
+
+    let user_in_db = sqlx::query_as::<_, user::UserInfo>("SELECT * FROM Users WHERE name = ?")
+      .bind("testuser")
+      .fetch_one(&pool)
+      .await
+      .unwrap();
+
+    assert_eq!(user_in_db.user_name, "testuser");
+  }
+}
