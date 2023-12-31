@@ -7,18 +7,18 @@ pub struct Seat {
   pub other_info: Option<String>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 pub struct SeatStatus {
   pub seat_id: u16,
   pub status: Status,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 pub struct AllSeatsStatus {
   pub seats: Vec<SeatStatus>,
 }
 
-#[derive(Serialize, PartialEq, Debug)]
+#[derive(Serialize, PartialEq, Debug, Deserialize)]
 pub enum Status {
   Available,
   Unavailable,

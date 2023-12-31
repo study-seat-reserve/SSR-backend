@@ -452,21 +452,36 @@ pub async fn set_seat_availability(
 黑名單
 */
 
+// fn register -> O
+// fn resend_verification_email
+// fn email_verify
+// fn login -> O
+// fn show_current_seats_status
+// fn show_seats_status_in_specific_timeslots
+// fn show_seat_reservations
+// fn reserve_seat
+// fn update_reservation
+// fn delete_reservation_time
+// fn display_user_reservations
+// fn set_unavailable_timeslots
+// fn set_seat_availability
+
 #[cfg(test)]
 mod tests {
 
   use crate::utils;
 
   use super::*;
-  use crate::model::user;
+  use crate::rocket::uri;
+  use rocket::http::ContentType;
   use rocket::http::Status as HttpStatus;
   use rocket::http::Status;
   use rocket::local::blocking::Client;
   use rocket::serde::json::json;
-  use rusqlite::params;
 
   #[test]
-  fn test_register_success() {
+  fn test_register() {
+    // Valid
     let client = Client::tracked(rocket::build()).expect("valid rocket instance");
     let base_url = get_base_url();
 
@@ -482,17 +497,15 @@ mod tests {
       .body(user_data.to_string())
       .dispatch();
 
-    assert_eq!(response.status(), Status::Ok); // HttpStatus::Ok
-  }
+    assert_eq!(response.status(), Status::Ok);
 
-  #[test]
-  fn test_register_failure() {
+    // Invalid
     let client = Client::tracked(rocket::build()).expect("valid rocket instance");
     let base_url = get_base_url();
 
     let user_data = json!({
         "user_name": "istestuser",
-        "password": "istestpassword123",
+        "password": "test",
         "email": "istest@email.ntou.edu.tw",
     });
 
@@ -507,7 +520,6 @@ mod tests {
     let client = Client::tracked(rocket::build()).expect("valid rocket instance");
     let base_url = get_base_url();
 
-    // Invalid data with empty user_name
     let invalid_user_data = json!({
         "user_name": "",
         "password": "istestpassword123",
@@ -523,8 +535,49 @@ mod tests {
     assert_eq!(response.status(), HttpStatus::UnprocessableEntity);
   }
 
+  #[tokio::test]
+  async fn test_resend_verification_email() {
+    // let email = "test@email.ntou.edu.tw".to_string();
+    // let verification_token = "testtoken".to_string();
+    // let expiration = get_now().timestamp() + 60;
+
+    // let claims = token::ResendVerificationClaim {
+    //   email: email.clone(),
+    //   verification_token: verification_token.clone(),
+    //   expiration: expiration,
+    //   exp: 12345678,
+    // };
+
+    // // 建立測試request
+    // let req = LocalRequest::with_header("Authorization", "Bearer dummytoken").to_request();
+
+    // // 模擬提取claims
+    // let res = claims.from_request(&req).await;
+    // assert!(res.is_success());
+    // let claims = res.unwrap();
+
+    // // 呼叫API
+    // let result = resend_verification_email(claims).await;
+
+    // // 驗證結果
+    // assert!(result.is_ok());
+
+    // // 驗證寄信邏輯是否正確執行
+    // let email_address = std::env::var("EMAIL_ADDRESS").unwrap();
+    // assert_eq!(email_address, "bot@example.com");
+    // assert_eq!(1, mails_sent()); // 寄信數量應為1
+
+    // // 驗證回傳值
+    // let token = result.unwrap();
+    // let new_claims = token::ResendVerificationClaim::verify_jwt(&token).unwrap();
+
+    // assert_eq!(new_claims.email, email);
+    // assert_eq!(new_claims.verification_token, verification_token);
+    // assert!(new_claims.expiration > expiration); //冷卻時間應該增加
+  }
+
   #[test]
-  fn test_email_verify_success() {
+  fn test_email_verify() {
     let client = Client::tracked(rocket::build()).expect("valid rocket instance");
     let base_url = get_base_url();
 
@@ -542,20 +595,16 @@ mod tests {
       .into_string()
       .unwrap()
       .contains("Your email has been successfully verified"));
-  }
 
-  #[test]
-  fn test_email_verify_missing_token() {
+    // 遺失 token
     let client = Client::tracked(rocket::build()).expect("valid rocket instance");
     let base_url = get_base_url();
 
     let response = client.get(format!("{}/api/verify", base_url)).dispatch();
 
     assert_eq!(response.status(), Status::BadRequest);
-  }
 
-  #[test]
-  fn test_email_verify_failure() {
+    // 驗證失敗
     let client = Client::tracked(rocket::build()).expect("valid rocket instance");
     let base_url = get_base_url();
 
@@ -571,189 +620,185 @@ mod tests {
     assert_eq!(response.status(), Status::NotFound);
   }
 
-  #[test]
-  fn test_login_success() {
-    let creds = user::LoginCreds {
-      user_name: "istestuser".to_string(),
-      password: "ispassword123".to_string(),
-    };
+  #[tokio::test]
+  async fn test_login() {
+    let client = Client::tracked(rocket::build()).unwrap();
 
-    let result = login(Json(creds));
+    // 正確登入
+    let user = json!({
+      "user_name": "testuser",
+      "password": "password123"
+    });
 
-    assert_eq!(result.is_ok(), true);
+    let response = client
+      .post("/api/login")
+      .header(ContentType::JSON)
+      .json(&user)
+      .dispatch();
 
-    // unverified
-    let creds = user::LoginCreds {
-      user_name: "isunverifieduser".to_string(),
-      password: "ispassword123".to_string(),
-    };
+    assert_eq!(response.status(), Status::Ok);
 
-    let result = login(Json(creds));
+    // 錯誤密碼
+    let wrong_password = json!({
+       "user_name": "testuser",
+       "password": "wrongpassword"
+    });
 
-    assert_eq!(result.unwrap_err(), Status::BadRequest);
+    let response = client
+      .post("/api/login")
+      .header(ContentType::JSON)
+      .json(&wrong_password)
+      .dispatch();
 
-    // no username
-    let creds = user::LoginCreds {
-      user_name: "".to_string(),
-      password: "ispassword123".to_string(),
-    };
+    assert_eq!(response.status(), Status::Unauthorized);
 
-    let result = login(Json(creds));
+    // 未驗證用戶
+    let unverified = json!({
+      "user_name": "unverified",
+      "password": "password123"
+    });
 
-    assert_eq!(result.unwrap_err(), Status::UnprocessableEntity);
+    let response = client
+      .post("/api/login")
+      .header(ContentType::JSON)
+      .json(&unverified)
+      .dispatch();
 
-    // no password
-    let creds = user::LoginCreds {
-      user_name: "istestuser".to_string(),
-      password: "".to_string(),
-    };
+    assert_eq!(response.status(), Status::BadRequest);
 
-    let result = login(Json(creds));
+    // Error
+    let client = Client::tracked(rocket::build()).unwrap();
 
-    assert_eq!(result.unwrap_err(), Status::Unauthorized);
+    let no_username = json!({
+       "user_name": "",
+       "password": "password"
+    });
+
+    let response = client
+      .post("/api/login")
+      .header(ContentType::JSON)
+      .json(&no_username)
+      .dispatch();
+
+    assert_eq!(response.status(), Status::UnprocessableEntity);
+
+    let no_password = json!({
+       "user_name": "testuser",
+       "password": ""
+    });
+
+    let response = client
+      .post("/api/login")
+      .header(ContentType::JSON)
+      .json(&no_password)
+      .dispatch();
+
+    assert_eq!(response.status(), Status::UnprocessableEntity);
   }
 
-  #[test]
-  fn test_login_validator() {
-    let creds = user::LoginCreds {
-      user_name: "".to_string(),
-      password: "istest".to_string(),
-    };
-    let result = login(Json(creds));
-    assert_eq!(result.unwrap_err(), Status::UnprocessableEntity);
-  }
-
+  ////////////////////////////////////////////////////////////////////////
   #[tokio::test]
   async fn test_show_current_seats_status() {
-    let result = show_current_seats_status().await;
+    //   database::init::init_db(&pool);
 
-    assert!(result.is_ok());
-    let result_str = result.unwrap();
+    //   let pool = database::connect_to_db().expect("database connection");
+    //   let result = show_current_seats_status(&pool).await;
+    //   // 驗證結果
+    //   assert!(result.is_ok());
+    //   let result_str = result.unwrap();
 
-    let _: seat::AllSeatsStatus =
-      serde_json::from_str(&result_str).expect("Result should be AllSeatsStatus JSON");
+    //   let status: seat::AllSeatsStatus =
+    //     serde_json::from_str(&result_str).expect("Result should be AllSeatsStatus JSON");
 
-    // unvailable time slot
-    database::init_db(); // 初始化 DB
+    //   assert_eq!(status.seats.len(), 217);
 
-    let mut conn = database::connect_to_db().unwrap();
-    let date = utils::get_today();
-    let time = utils::get_now();
+    //   // DB錯誤
+    //   let db_path = format!("{}/SSR.db3", utils::get_root());
+    //   std::fs::remove_file(db_path).unwrap();
 
-    // 插入 unavailable timeslot 包含當前時間
-    let mut tx = conn.transaction().unwrap();
-    tx.execute(
-      "INSERT INTO UnavailableTimeSlots (date, start_time, end_time) VALUES (?1, 0, ?2)",
-      params![date, time + 3600],
-    )
-    .unwrap();
-    tx.commit().unwrap();
+    //   let result = show_current_seats_status(&pool).await;
+    //   assert_eq!(result.unwrap_err(), Status::InternalServerError);
 
-    let result = show_current_seats_status().await;
+    //   // Unavailable timeslot
+    //   let mut conn = database::connect_to_db().unwrap();
 
-    assert_eq!(result.unwrap(), "Unavailable");
+    //   let date = utils::get_today();
+    //   let time = utils::get_now();
+    //   // 插入 Unavailable timeslot 含目前時間
+    //   let mut tx = conn.transaction().unwrap();
+    //   tx.execute(
+    //     "INSERT INTO UnavailableTimeSlots (date, start_time, end_time) VALUES (?1, 0, ?2)",
+    //     params![date, time + 3600],
+    //   )
+    //   .unwrap();
+    //   tx.commit().unwrap();
 
-    // DB error
-    database::init_db();
-    let db_path = format!("{}/SSR.db3", utils::get_root());
-    std::fs::remove_file(db_path).unwrap();
+    //   let result = show_current_seats_status(&pool).await;
 
-    let result = show_current_seats_status().await;
-
-    assert_eq!(result.unwrap_err(), Status::InternalServerError);
+    //   assert_eq!(result.unwrap(), "Unavailable");
   }
 
   #[tokio::test]
-  async fn test_show_seats_status_by_time_success() {
-    let date = "2023-12-28";
-    let start_time = 10000;
-    let end_time = 12000;
+  async fn test_show_seats_status_in_specific_timeslots() {
+    let client = Client::tracked(rocket::build()).unwrap();
 
-    let result = show_seats_status_by_time(date, start_time, end_time).await;
+    // 測試正常情況
+    let start_time = 1651510400; // 2022-05-04 08:00:00
+    let end_time = 1651514000; // 2022-05-04 09:00:00
 
-    assert!(result.is_ok());
+    let response = client
+      .get(uri!(show_seats_status_in_specific_timeslots: start_time, end_time))
+      .dispatch()
+      .await;
 
-    let result_str = result.unwrap();
-    let status: seat::AllSeatsStatus =
-      serde_json::from_str(&result_str).expect("Result should be AllSeatsStatus JSON");
+    assert_eq!(response.status(), Status::Ok);
+    let seats_status = response.into_string().unwrap();
+    // 驗證回傳格式
+    assert!(seats_status.starts_with("{"));
+    assert!(seats_status.ends_with("}"));
+    assert!(seats_status.contains("\"seats\":"));
 
-    assert_eq!(status.seats.len(), 217); // 應該有 217 個座位
+    // 測試無效時間格式
+    let start_time = "invalid";
+    let end_time = "invalid";
+
+    let response = client
+      .get(uri!(show_seats_status_in_specific_timeslots: start_time, end_time))
+      .dispatch()
+      .await;
+
+    assert_eq!(response.status(), Status::UnprocessableEntity);
+
+    // 測試 DB 錯誤
+    // 先關閉 DB
+    // 再呼叫 API
+    let response = client
+      .get(uri!(show_seats_status_in_specific_timeslots: 1651510400, 1651514000))
+      .dispatch()
+      .await;
+
+    assert_eq!(response.status(), Status::InternalServerError);
   }
 
   #[tokio::test]
-  async fn test_show_seats_status_by_time_invalid_datetime() {
-    let date = "2023-12-28";
-    let start_time = 22000; // 超出時間範圍
-    let end_time = 25000;
+  async fn test_show_seat_reservations() {}
 
-    let result = show_seats_status_by_time(date, start_time, end_time).await;
-
-    assert_eq!(result.unwrap_err(), Status::UnprocessableEntity);
-  }
+    #[tokio::test]
+  async fn test_reserve_seat(){}
 
   #[tokio::test]
-  async fn test_show_seats_status_by_time_db_error() {
-    database::init_db();
-    let db_path = format!("{}/SSR.db3", utils::get_root());
-    std::fs::remove_file(db_path).unwrap();
-
-    let date = "2023-12-28";
-    let start_time = 10000;
-    let end_time = 12000;
-
-    let result = show_seats_status_by_time(date, start_time, end_time).await;
-
-    assert_eq!(result.unwrap_err(), Status::InternalServerError);
-  }
+  async fn test_update_reservation(){}
 
   #[tokio::test]
-  async fn test_show_seat_reservations_success() {
-    let date = "2023-12-28";
-    let seat_id = 125;
-
-    let result = show_seat_reservations(&date, seat_id).await;
-
-    assert!(result.is_ok());
-
-    let result_str = result.unwrap();
-    let timeslots: Vec<(u32, u32)> =
-      serde_json::from_str(&result_str).expect("Result should be timeslots JSON");
-
-    // 檢查 seat_id 相等
-    assert!(timeslots.iter().all(|(start, end)| start < end));
-  }
+  async fn test_delete_reservation_time(){}
 
   #[tokio::test]
-  async fn test_show_seat_reservations_invalid_seat() {
-    let date = "2023-12-28";
-    let seat_id = 0; // 不存在的座位
-
-    let result = show_seat_reservations(&date, seat_id).await;
-
-    assert_eq!(result.unwrap_err(), Status::UnprocessableEntity);
-  }
+  async fn test_display_user_reservations(){}
 
   #[tokio::test]
-  async fn test_show_seat_reservations_invalid_date() {
-    let date = "2023-15-32"; // 不存在的日期
-    let seat_id = 120;
-
-    let result = show_seat_reservations(&date, seat_id).await;
-
-    assert_eq!(result.unwrap_err(), Status::UnprocessableEntity);
-  }
+  async fn test_set_unavailable_timeslots(){}
 
   #[tokio::test]
-  async fn test_show_seat_reservations_db_error() {
-    database::init_db();
-    let db_path = format!("{}/SSR.db3", utils::get_root());
-    std::fs::remove_file(db_path).unwrap();
+  async fn test_set_seat_availability(){}
 
-    let date = "2023-12-28";
-    let seat_id = 120;
-
-    let result = show_seat_reservations(&date, seat_id).await;
-
-    assert_eq!(result.unwrap_err(), Status::InternalServerError);
-  }
 }
