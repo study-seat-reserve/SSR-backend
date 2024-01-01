@@ -86,10 +86,10 @@ pub async fn insert_user_to_blacklist(
     query!(
       "INSERT INTO BlackList
         (user_name, start_time, end_time)
-      VALUES
+      VALUES 
         (
-          ?,
-          datetime(?, 'unixepoch', '+8 hours'),
+          ?, 
+          datetime(?, 'unixepoch', '+8 hours'), 
           datetime(?, 'unixepoch', '+8 hours')
         )",
       user_name,
@@ -144,9 +144,9 @@ pub async fn is_user_in_blacklist(pool: &Pool<Sqlite>, user_name: &str) -> Resul
     query_scalar!(
       "SELECT EXISTS(
         SELECT 1 FROM BlackList
-        WHERE
-          user_name = ? AND
-          start_time <= datetime(?, 'unixepoch', '+8 hours') AND
+        WHERE 
+          user_name = ? AND 
+          start_time <= datetime(?, 'unixepoch', '+8 hours') AND 
           end_time > datetime(?, 'unixepoch', '+8 hours')
       )",
       user_name,
@@ -195,5 +195,189 @@ mod tests {
       .unwrap();
 
     assert_eq!(user_in_db.user_name, "testuser");
+  }
+
+  #[tokio::test]
+  async fn test_update_user_verified_by_token() {
+    let pool = Pool::connect("sqlite::memory:").await.unwrap();
+
+    sqlx::query!(
+      r#"
+    CREATE TABLE Users (
+      id INTEGER PRIMARY KEY,
+      user_name TEXT NOT NULL, 
+      verified BOOLEAN NOT NULL DEFAULT 0,
+      verification_token TEXT NOT NULL
+    )
+    "#
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let username = "testuser";
+    let token = "testtoken";
+
+    sqlx::query!(
+      r#"
+    INSERT INTO Users (user_name, verification_token)
+    VALUES (?, ?)
+    "#,
+      username,
+      token
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    update_user_verified_by_token(&pool, token).await.unwrap();
+
+    let user = sqlx::query!(
+      r#"
+    SELECT verified FROM Users WHERE user_name = ?
+  "#,
+      username
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+
+    assert_eq!(user.verified, true);
+  }
+
+  #[tokio::test]
+  async fn test_insert_user_to_blacklist() {
+    let pool = Pool::connect("sqlite::memory:").await.unwrap();
+
+    sqlx::query!(
+      r#"
+    CREATE TABLE BlackList (
+      id INTEGER PRIMARY KEY,
+      user_name TEXT NOT NULL,
+      start_time INTEGER NOT NULL, 
+      end_time INTEGER NOT NULL
+    )
+    "#
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let user_name = "testuser";
+    let start_time = 1600000000;
+    let end_time = 1700000000;
+
+    insert_user_to_blacklist(&pool, user_name, start_time, end_time)
+      .await
+      .unwrap();
+
+    let user_in_blacklist = sqlx::query!(
+      r#"
+    SELECT * FROM BlackList WHERE user_name = ?
+    "#,
+      user_name
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+
+    assert_eq!(user_in_blacklist.user_name, user_name);
+    assert_eq!(user_in_blacklist.start_time, start_time);
+    assert_eq!(user_in_blacklist.end_time, end_time);
+  }
+
+  #[tokio::test]
+  async fn test_delete_user_from_blacklist() {
+    let pool = Pool::connect("sqlite::memory:").await.unwrap();
+
+    sqlx::query!(
+      r#"
+    CREATE TABLE BlackList (
+      id INTEGER PRIMARY KEY,
+      user_name TEXT NOT NULL,
+      start_time INTEGER NOT NULL,
+      end_time INTEGER NOT NULL
+    )
+    "#
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let user_name = "testuser";
+    sqlx::query!(
+      r#"
+    INSERT INTO BlackList (user_name, start_time, end_time)
+    VALUES (?, 1000, 2000)
+    "#,
+      user_name
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    delete_user_from_blacklist(&pool, user_name).await.unwrap();
+
+    let user_in_blacklist = sqlx::query!(
+      r#"
+    SELECT * FROM BlackList WHERE user_name = ?
+    "#,
+      user_name
+    )
+    .fetch_one(&pool)
+    .await;
+
+    assert!(user_in_blacklist.is_err());
+  }
+
+  #[tokio::test]
+  async fn test_is_user_in_blacklist() {
+    let pool = Pool::connect("sqlite::memory:").await.unwrap();
+
+    sqlx::query!(
+      r#"
+    CREATE TABLE BlackList (
+      id INTEGER PRIMARY KEY,
+      user_name TEXT NOT NULL,
+      start_time INTEGER NOT NULL,
+      end_time INTEGER NOT NULL
+    )
+  "#
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let user_name = "testuser";
+
+    let result = is_user_in_blacklist(&pool, &user_name).await;
+    assert!(result.unwrap() == false);
+
+    sqlx::query!(
+      r#"
+    INSERT INTO BlackList (user_name, start_time, end_time)
+    VALUES (?, 1000, 2000)
+  "#,
+      user_name
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let result = is_user_in_blacklist(&pool, &user_name).await;
+    assert!(result.unwrap() == true);
+
+    sqlx::query!(
+      r#"
+    DELETE FROM BlackList WHERE user_name = ?
+  "#,
+      user_name
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let result = is_user_in_blacklist(&pool, &user_name).await;
+    assert!(result.unwrap() == false);
   }
 }
