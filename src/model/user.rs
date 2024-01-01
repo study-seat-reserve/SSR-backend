@@ -1,4 +1,4 @@
-use super::{common::*, validate_utils::*};
+use super::common::*;
 use regex::Regex;
 use sqlx::{encode::IsNull, sqlite::SqliteArgumentValue, Encode};
 
@@ -146,8 +146,6 @@ fn validate_ban_request(request: &BanRequest) -> Result<(), ValidationError> {
 #[cfg(test)]
 mod tests {
   use super::*;
-  use regex::Regex;
-  use sqlx::sqlite;
   use std::str::FromStr;
 
   #[test]
