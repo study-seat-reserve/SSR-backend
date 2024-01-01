@@ -75,3 +75,101 @@ pub async fn insert_unavailable_timeslot(
 
   Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[tokio::test]
+  async fn test_is_overlapping_with_unavailable_timeslot() {
+    let pool = Pool::connect("sqlite::memory:").await.unwrap();
+
+    let start_time = 1672531200; // 2024-01-01 00:00:00
+    let end_time = 1672540800; // 2024-01-01 02:00:00
+
+    // Insert overlapping timeslot
+    sqlx::query!(
+      "INSERT INTO UnavailableTimeSlots (start_time, end_time)
+       VALUES (datetime(1640993600, 'unixepoch'), datetime(1641002000, 'unixepoch'))"
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let result = is_overlapping_with_unavailable_timeslot(&pool, start_time, end_time).await;
+
+    assert!(result.unwrap());
+
+    // Insert non-overlapping timeslot
+    sqlx::query!(
+      "INSERT INTO UnavailableTimeSlots (start_time, end_time)
+       VALUES (datetime(1641007200, 'unixepoch'), datetime(1641010800, 'unixepoch'))"
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let result = is_overlapping_with_unavailable_timeslot(&pool, start_time, end_time).await;
+
+    assert!(!result.unwrap());
+  }
+
+  #[tokio::test]
+  async fn test_is_within_unavailable_timeslot() {
+    let pool = Pool::connect("sqlite::memory:").await.unwrap();
+
+    let time = 1640995200; // 2022-01-01 01:00:00
+
+    // Insert surrounding timeslot
+    sqlx::query!(
+      "INSERT INTO UnavailableTimeSlots (start_time, end_time)
+       VALUES (datetime(1640993600, 'unixepoch'), datetime(1641002000, 'unixepoch'))"
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let result = is_within_unavailable_timeslot(&pool, time).await;
+
+    assert!(result.unwrap());
+
+    // Insert non-surrounding timeslot
+    sqlx::query!(
+      "INSERT INTO UnavailableTimeSlots (start_time, end_time)  
+       VALUES (datetime(1641007200, 'unixepoch'), datetime(1641010800, 'unixepoch'))"
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let result = is_within_unavailable_timeslot(&pool, time).await;
+
+    assert!(!result.unwrap());
+  }
+
+  #[tokio::test]
+  async fn test_insert_unavailable_timeslot() {
+    let pool = Pool::connect("sqlite::memory:").await.unwrap();
+
+    let start_time = 1672531200; // 2024-01-01 00:00:00
+    let end_time = 1672540800; // 2022-01-01 02:00:00
+
+    insert_unavailable_timeslot(&pool, start_time, end_time)
+      .await
+      .unwrap();
+
+    let result = sqlx::query!(
+        "SELECT start_time, end_time FROM UnavailableTimeSlots WHERE start_time = datetime(?, 'unixepoch') AND end_time = datetime(?, 'unixepoch')",
+        start_time,
+        end_time
+    )
+    .fetch_one(&pool)
+    .await;
+
+    assert!(result.is_ok());
+
+    let record = result.unwrap();
+    assert_eq!(record.start_time, start_time);
+    assert_eq!(record.end_time, end_time);
+  }
+}
