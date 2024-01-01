@@ -1,96 +1,207 @@
-use super::constant::*;
-use crate::utils::{get_now, get_today};
-use chrono::{Duration, NaiveDate};
-use serde::{Deserialize, Serialize};
-use validator::{Validate, ValidationError};
+use super::{common::*, validate_utils::*};
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct Reservation {
+  pub seat_id: u16,
+  pub start_time: i64,
+  pub end_time: i64,
+}
 
 #[derive(Debug, Deserialize, Serialize, Validate)]
-#[validate(schema(function = "validate_reservation", skip_on_field_errors = false))]
-pub struct Reservation {
+#[validate(schema(function = "validate_reservation_request", skip_on_field_errors = false))]
+pub struct InsertReservationRequest {
   #[validate(custom = "validate_seat_id")]
   pub seat_id: u16,
-  #[validate(custom = "validate_date")]
-  pub date: NaiveDate,
-  pub start_time: u32,
-  pub end_time: u32,
+  pub start_time: i64,
+  pub end_time: i64,
 }
 
 #[derive(Debug, Deserialize, Serialize, Validate)]
-#[validate(schema(function = "validate_update_reservation", skip_on_field_errors = false))]
-pub struct UpdateReservation {
-  #[validate(custom = "validate_date")]
-  pub date: NaiveDate,
-  pub new_start_time: u32,
-  pub new_end_time: u32,
+#[validate(schema(function = "validate_update_reservation_request", skip_on_field_errors = false))]
+pub struct UpdateReservationRequest {
+  pub start_time: i64,
+  pub end_time: i64,
+  pub new_start_time: i64,
+  pub new_end_time: i64,
 }
 
 #[derive(Debug, Deserialize, Serialize, Validate)]
-pub struct DeleteReservation {
-  #[validate(custom = "validate_date")]
-  pub date: NaiveDate,
+#[validate(schema(function = "validate_delete_reservation_request", skip_on_field_errors = false))]
+pub struct DeleteReservationRequest {
+  pub start_time: i64,
+  pub end_time: i64,
 }
 
-fn validate_seat_id(seat_id: u16) -> Result<(), ValidationError> {
-  if seat_id < 1 || seat_id > NUMBER_OF_SEATS {
-    return Err(ValidationError::new("Seat id out of range"));
+fn validate_reservation_request(request: &InsertReservationRequest) -> Result<(), ValidationError> {
+  let start_time: i64 = request.start_time;
+  let end_time: i64 = request.end_time;
+
+  validate_datetime(start_time, end_time)
+}
+
+impl FromRow<'_, SqliteRow> for Reservation {
+  fn from_row(row: &SqliteRow) -> Result<Self, Error> {
+    let seat_id_i64: i64 = row.try_get("seat_id")?;
+    let seat_id: u16 = seat_id_i64.try_into().map_err(|_| Error::RowNotFound)?;
+
+    let start_time_str: String = row.try_get("start_time")?;
+    let end_time_str: String = row.try_get("end_time")?;
+
+    let start_time: i64 = start_time_str
+      .parse()
+      .map_err(|source| Error::ColumnDecode {
+        index: "start_time".to_string(),
+        source: Box::new(source),
+      })?;
+
+    let end_time: i64 = end_time_str.parse().map_err(|source| Error::ColumnDecode {
+      index: "end_time".to_string(),
+      source: Box::new(source),
+    })?;
+
+    Ok(Reservation {
+      seat_id,
+      start_time,
+      end_time,
+    })
+  }
+}
+
+fn validate_update_reservation_request(request: &UpdateReservationRequest) -> Result<(), ValidationError> {
+  let start_time = request.start_time;
+  let end_time = request.end_time;
+  let new_start_time = request.new_start_time;
+  let new_end_time = request.new_end_time;
+
+  validate_datetime(start_time, end_time)?;
+  validate_datetime(new_start_time, new_end_time)?;
+  on_the_same_day(start_time, new_start_time)
+}
+
+fn validate_delete_reservation_request(request: &DeleteReservationRequest) -> Result<(), ValidationError> {
+  let start_time = request.start_time;
+  let end_time = request.end_time;
+
+  validate_datetime(start_time, end_time)
+}
+
+#[cfg(test)]
+mod tests {
+
+  use super::*;
+  use crate::utils::{get_now, naive_date_to_timestamp};
+  use chrono::Timelike;
+
+  #[test]
+  fn test_validate_reservation() {
+    let now = get_now();
+    let start_time =
+      naive_date_to_timestamp(now.date(), now.hour(), now.minute(), now.second()).unwrap();
+    let end_time =
+      naive_date_to_timestamp(now.date(), now.hour() + 1, now.minute(), now.second()).unwrap();
+
+    let request = InsertReservationRequest {
+      seat_id: 109,
+      start_time,
+      end_time,
+    };
+
+    assert!(validate_reservation(&request).is_ok());
+
+    let start_time =
+      naive_date_to_timestamp(now.date(), now.hour(), now.minute(), now.second()).unwrap();
+    let end_time =
+      naive_date_to_timestamp(now.date(), now.hour() - 1, now.minute(), now.second()).unwrap();
+
+    let request = InsertReservationRequest {
+      seat_id: 109,
+      start_time,
+      end_time,
+    };
+
+    assert!(validate_reservation(&request).is_err());
   }
 
-  Ok(())
-}
+  #[test]
+  fn test_validate_update_reservation() {
+    // Valid
+    let now = get_now();
 
-fn validate_date(date: &NaiveDate) -> Result<(), ValidationError> {
-  let today = get_today();
-  let three_days_later = today + Duration::days(3);
+    let start_time =
+      naive_date_to_timestamp(now.date(), now.hour(), now.minute(), now.second()).unwrap();
+    let end_time =
+      naive_date_to_timestamp(now.date(), now.hour() + 1, now.minute(), now.second()).unwrap();
 
-  if *date < today || *date > three_days_later {
-    return Err(ValidationError::new("Invalid reservation date"));
+    let new_start_time =
+      naive_date_to_timestamp(now.date(), now.hour() + 2, now.minute(), now.second()).unwrap();
+    let new_end_time =
+      naive_date_to_timestamp(now.date(), now.hour() + 3, now.minute(), now.second()).unwrap();
+
+    let request = UpdateReservationRequest {
+      start_time,
+      end_time,
+      new_start_time,
+      new_end_time,
+    };
+
+    assert!(validate_update_reservation(&request).is_ok());
+
+    // Invalid
+    let now = get_now();
+    let tomorrow = now.date() + chrono::Duration::days(1);
+
+    let start_time =
+      naive_date_to_timestamp(now.date(), now.hour(), now.minute(), now.second()).unwrap();
+    let end_time =
+      naive_date_to_timestamp(now.date(), now.hour() + 1, now.minute(), now.second()).unwrap();
+
+    let new_start_time =
+      naive_date_to_timestamp(tomorrow, now.hour(), now.minute(), now.second()).unwrap();
+    let new_end_time =
+      naive_date_to_timestamp(tomorrow, now.hour() + 1, now.minute(), now.second()).unwrap();
+
+    let request = UpdateReservationRequest {
+      start_time,
+      end_time,
+      new_start_time,
+      new_end_time,
+    };
+
+    assert!(validate_update_reservation(&request).is_err());
   }
 
-  Ok(())
-}
+  #[test]
+  fn test_validate_delete_reservation() {
+    // Valid
+    let now = get_now();
 
-fn validate_datetime(
-  date: NaiveDate,
-  start_time: u32,
-  end_time: u32,
-) -> Result<(), ValidationError> {
-  let today = get_today();
-  let date: NaiveDate = date;
-  let start_time: u32 = start_time;
-  let end_time: u32 = end_time;
-  let now = get_now();
+    let start_time =
+      naive_date_to_timestamp(now.date(), now.hour(), now.minute(), now.second()).unwrap();
+    let end_time =
+      naive_date_to_timestamp(now.date(), now.hour() + 1, now.minute(), now.second()).unwrap();
 
-  if date == today && start_time < now {
-    return Err(ValidationError::new(
-      "Invalid reservation start time: start time < current time",
-    ));
+    let request = DeleteReservationRequest {
+      start_time,
+      end_time,
+    };
+
+    assert!(validate_delete_reservation(&request).is_ok());
+
+    // Invalid
+    let now = get_now();
+
+    let start_time =
+      naive_date_to_timestamp(now.date(), now.hour(), now.minute(), now.second()).unwrap();
+    let end_time =
+      naive_date_to_timestamp(now.date(), now.hour() - 1, now.minute(), now.second()).unwrap();
+
+    let request = DeleteReservationRequest {
+      start_time,
+      end_time,
+    };
+
+    assert!(validate_delete_reservation(&request).is_err());
   }
-
-  if end_time < start_time {
-    return Err(ValidationError::new(
-      "Invalid reservation start time: start time > end time",
-    ));
-  }
-
-  Ok(())
-}
-
-fn validate_update_reservation(
-  update_reservation: &UpdateReservation,
-) -> Result<(), ValidationError> {
-  let date: NaiveDate = update_reservation.date;
-  let start_time: u32 = update_reservation.new_start_time;
-  let end_time: u32 = update_reservation.new_end_time;
-
-  validate_datetime(date, start_time, end_time)
-}
-
-fn validate_reservation(reservation: &Reservation) -> Result<(), ValidationError> {
-  let date: NaiveDate = reservation.date;
-  let start_time: u32 = reservation.start_time;
-  let end_time: u32 = reservation.end_time;
-
-  validate_datetime(date, start_time, end_time)
 }
 //TEST
 

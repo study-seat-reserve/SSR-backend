@@ -1,19 +1,51 @@
-use super::user;
-use crate::utils::*;
-use chrono::{Duration, Utc};
+use super::{common::*, user};
+use crate::utils::handle;
 
-use rocket::request::{FromRequest, Outcome, Request};
-use serde::{Deserialize, Serialize};
+use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation};
+use rocket::{
+  http::Status,
+  request::{FromRequest, Outcome, Request},
+};
+use std::env;
 
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
-pub struct Claims {
+pub trait Claim: Sized {
+  fn verify_jwt(token: &str) -> Result<Self, Status>;
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct UserInfoClaim {
   pub user: String,
   pub role: user::UserRole,
   pub exp: usize,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ResendVerificationClaim {
+  pub email: String,
+  pub verification_token: String,
+  pub expiration: i64,
+  pub exp: usize,
+}
+
+impl Claim for UserInfoClaim {
+  fn verify_jwt(token: &str) -> Result<UserInfoClaim, Status> {
+    let key = env::var("SECRET_KEY").expect("Failed to get secret key");
+
+    let token = handle(
+      decode::<UserInfoClaim>(
+        token,
+        &DecodingKey::from_secret(key.as_ref()),
+        &Validation::new(Algorithm::HS256),
+      ),
+      "Decoding JWT",
+    )?;
+
+    Ok(token.claims)
+  }
+}
+
 #[rocket::async_trait]
-impl<'r> FromRequest<'r> for Claims {
+impl<'r> FromRequest<'r> for UserInfoClaim {
   type Error = ();
 
   async fn from_request(request: &'r Request<'_>) -> Outcome<Self, Self::Error> {
@@ -21,9 +53,8 @@ impl<'r> FromRequest<'r> for Claims {
     match headers {
       Some(header) => {
         let token = header.replace("Bearer ", "");
-        log::debug!("token: {:?}", token);
 
-        match verify_jwt(&token) {
+        match Self::verify_jwt(&token) {
           Ok(claims) => Outcome::Success(claims),
           Err(_) => Outcome::Failure((Status::Unauthorized, ())),
         }
@@ -33,56 +64,131 @@ impl<'r> FromRequest<'r> for Claims {
   }
 }
 
-// TEST
-#[cfg(test)]
-mod test {
-  use super::*;
-  use crate::model::user::{self};
-  use chrono::{Duration, Utc};
-  use jsonwebtoken::{decode, encode, Algorithm, DecodingKey, EncodingKey, Header, Validation};
+impl Claim for ResendVerificationClaim {
+  fn verify_jwt(token: &str) -> Result<ResendVerificationClaim, Status> {
+    let key = env::var("SECRET_KEY").expect("Failed to get secret key");
 
-  fn test_claims() {
-    let claim = Claims {
-      user: "istestuser".to_string(),
-      role: user::UserRole::RegularUser,
-      exp: 1234567,
+    let token = handle(
+      decode::<ResendVerificationClaim>(
+        token,
+        &DecodingKey::from_secret(key.as_ref()),
+        &Validation::new(Algorithm::HS256),
+      ),
+      "Decoding JWT",
+    )?;
+
+    Ok(token.claims)
+  }
+}
+
+#[rocket::async_trait]
+impl<'r> FromRequest<'r> for ResendVerificationClaim {
+  type Error = ();
+
+  async fn from_request(request: &'r Request<'_>) -> Outcome<Self, Self::Error> {
+    let headers = request.headers().get_one("Authorization");
+    match headers {
+      Some(header) => {
+        let token = header.replace("Bearer ", "");
+
+        match Self::verify_jwt(&token) {
+          Ok(claims) => Outcome::Success(claims),
+          Err(_) => Outcome::Failure((Status::Unauthorized, ())),
+        }
+      }
+      None => Outcome::Failure((Status::BadRequest, ())),
+    }
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use crate::model::user::UserRole;
+
+  use super::*;
+
+  #[test]
+  fn test_verify_jwt_user_info_claim() {
+    env::set_var("SECRET_KEY", "your_secret_key");
+
+    let user_info_claim = UserInfoClaim {
+      user: "testuser".to_string(),
+      role: UserRole::RegularUser,
+      exp: 1234567890,
     };
 
-    let serialized = serde_json::to_string(&claim).unwrap();
-    let deserialized: Claims = serde_json::from_str(&serialized).unwrap();
+    let token = jsonwebtoken::encode(
+      &jsonwebtoken::Header::default(),
+      &user_info_claim,
+      &jsonwebtoken::EncodingKey::from_secret("your_secret_key".as_ref()),
+    )
+    .expect("Failed to encode JWT");
 
-    assert_eq!(claim, deserialized);
+    let result = UserInfoClaim::verify_jwt(&token);
+    assert!(result.is_ok());
+
+    let invalid_token = "invalid_token";
+    let result = UserInfoClaim::verify_jwt(invalid_token);
+    assert!(result.is_err());
   }
 
   #[test]
-  fn test_token() {
-    let key = "istestkey";
-    let encoding_key = EncodingKey::from_secret(key.as_bytes());
-    let decoding_key = DecodingKey::from_secret(key.as_bytes());
+  fn test_verify_jwt_resend_verification_claim() {
+    env::set_var("SECRET_KEY", "your_secret_key");
 
-    let header = Header::default();
-
-    let expiration = Utc::now()
-      .checked_add_signed(Duration::hours(1))
-      .expect("valid timestamp")
-      .timestamp() as usize;
-
-    let claims = Claims {
-      user: "istestuser".to_string(),
-      role: user::UserRole::RegularUser,
-      exp: expiration,
+    let resend_verification_claim = ResendVerificationClaim {
+      email: "test@email.ntou.edu.tw".to_string(),
+      verification_token: "verificationtoken".to_string(),
+      expiration: 1234567890,
+      exp: 1234567890,
     };
 
-    let token = encode(&header, &claims, &encoding_key).unwrap();
+    let token = jsonwebtoken::encode(
+      &jsonwebtoken::Header::default(),
+      &resend_verification_claim,
+      &jsonwebtoken::EncodingKey::from_secret("your_secret_key".as_ref()),
+    )
+    .expect("Failed to encode JWT");
 
-    let validation = Validation::new(Algorithm::HS256);
-    let decoded_claims = decode::<Claims>(&token, &decoding_key, &validation);
-    assert!(decoded_claims.is_ok());
+    let result = ResendVerificationClaim::verify_jwt(&token);
+    assert!(result.is_ok());
 
-    let decoded_claims = decoded_claims.unwrap();
-    assert_eq!(decoded_claims.claims, claims);
+    let invalid_token = "invalid_token";
+    let result = ResendVerificationClaim::verify_jwt(invalid_token);
+    assert!(result.is_err());
   }
 
-  /* UNDO */
-  // test_from_request
+  #[tokio::test]
+  async fn test_from_request_user_info_claim() {
+    env::set_var("SECRET_KEY", "your_secret_key");
+
+    let user_info_claim = UserInfoClaim {
+      user: "testuser".to_string(),
+      role: UserRole::RegularUser,
+      exp: 1234567890,
+    };
+
+    let token = jsonwebtoken::encode(
+      &jsonwebtoken::Header::default(),
+      &user_info_claim,
+      &jsonwebtoken::EncodingKey::from_secret("your_secret_key".as_ref()),
+    )
+    .expect("Failed to encode JWT");
+
+    env::set_var("SECRET_KEY", "your_secret_key");
+
+    let resend_verification_claim = ResendVerificationClaim {
+      email: "test@email.ntou.edu.tw".to_string(),
+      verification_token: "verificationtoken".to_string(),
+      expiration: 1234567890,
+      exp: 1234567890,
+    };
+
+    let token = jsonwebtoken::encode(
+      &jsonwebtoken::Header::default(),
+      &resend_verification_claim,
+      &jsonwebtoken::EncodingKey::from_secret("your_secret_key".as_ref()),
+    )
+    .expect("Failed to encode JWT");
+  }
 }

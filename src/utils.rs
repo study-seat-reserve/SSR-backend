@@ -1,13 +1,17 @@
-use crate::model::{constant::*, *};
-use chrono::{Duration, Local, NaiveDate, NaiveDateTime, NaiveTime, Timelike, Utc};
-use jsonwebtoken::{decode, encode, Algorithm, DecodingKey, EncodingKey, Header, Validation};
+use crate::model::*;
+use chrono::{Duration, FixedOffset, Local, NaiveDate, NaiveDateTime, NaiveTime, TimeZone, Utc};
+use jsonwebtoken::{encode, Algorithm, EncodingKey, Header};
 use lettre::{
   message::Mailbox, transport::smtp::authentication::Credentials, Message, SmtpTransport, Transport,
 };
-pub use rocket::http::Status;
-use rusqlite::{Error as SqliteError, ErrorCode};
-use std::{env, io::ErrorKind};
+use sqlx::Error as SqlxError;
+use std::{
+  env,
+  io::{Error as IoError, ErrorKind},
+};
 use validator::ValidationErrorsKind;
+
+pub use rocket::http::Status;
 
 pub fn handle<T, E>(result: Result<T, E>, prefix: &str) -> Result<T, Status>
 where
@@ -18,26 +22,28 @@ where
 
     let dyn_error: &dyn std::error::Error = &err;
 
-    if let Some(e) = dyn_error.downcast_ref::<std::io::Error>() {
+    if let Some(e) = dyn_error.downcast_ref::<IoError>() {
       match e.kind() {
         ErrorKind::NotFound => Status::NotFound,
         ErrorKind::PermissionDenied => Status::Forbidden,
         ErrorKind::ConnectionRefused => Status::ServiceUnavailable,
         _ => Status::InternalServerError,
       }
-    } else if let Some(e) = dyn_error.downcast_ref::<rusqlite::Error>() {
-      match e {
-        SqliteError::SqliteFailure(se, _) => match se.code {
-          ErrorCode::ConstraintViolation | ErrorCode::TypeMismatch => Status::UnprocessableEntity,
-          ErrorCode::PermissionDenied => Status::Forbidden,
-          ErrorCode::NotFound => Status::NotFound,
-          ErrorCode::DatabaseBusy | ErrorCode::DatabaseLocked => Status::ServiceUnavailable,
-          _ => Status::InternalServerError,
-        },
-        _ => Status::InternalServerError,
-      }
     } else {
       Status::InternalServerError
+    }
+  })
+}
+
+pub fn handle_sqlx<T>(result: Result<T, SqlxError>, prefix: &str) -> Result<T, Status> {
+  result.map_err(|err| {
+    log::error!("{} failed with error: {:?}", prefix, err);
+
+    match &err {
+      SqlxError::RowNotFound => Status::NotFound,
+      SqlxError::ColumnNotFound(_) => Status::BadRequest,
+      SqlxError::ColumnIndexOutOfBounds { .. } => Status::BadRequest,
+      _ => Status::InternalServerError,
     }
   })
 }
@@ -71,76 +77,88 @@ pub fn get_today() -> NaiveDate {
   Local::now().date_naive()
 }
 
-pub fn get_now() -> u32 {
-  parse_time(Local::now().naive_local().time()).expect("Parse time 'now' error!")
-}
-
-pub fn get_datetime() -> NaiveDateTime {
+pub fn get_now() -> NaiveDateTime {
   Local::now().naive_local()
 }
 
-pub fn get_tomorrow_midnight() -> NaiveDateTime {
-  let now = Local::now().date_naive().and_hms_opt(0, 0, 0).unwrap();
-  let get_tomorrow_midnight = now + Duration::days(1);
-  get_tomorrow_midnight
+pub fn time_to_string(timestamp: i64) -> Result<String, Status> {
+  let naive_datetime = NaiveDateTime::from_timestamp_opt(timestamp, 0).ok_or_else(|| {
+    log::error!("Invalid timestamp");
+    Status::InternalServerError
+  })?;
+
+  Ok(naive_datetime.format("%Y-%m-%d %H:%M:%S").to_string())
 }
 
-pub fn get_last_week() -> NaiveDate {
-  let now = Local::now().date_naive();
-  let seven_days_ago = now - Duration::days(7);
-  seven_days_ago
+pub fn naive_date_to_timestamp(
+  date: NaiveDate,
+  hour: u32,
+  min: u32,
+  sec: u32,
+) -> Result<i64, Status> {
+  let time = NaiveTime::from_hms_opt(hour, min, sec).ok_or_else(|| {
+    log::error!("Invalid NaiveTime");
+    Status::InternalServerError
+  })?;
+
+  // 本地日期時間 GMT++8
+  let datetime_local = NaiveDateTime::new(date, time);
+  // GNT 0 日期時間
+  let datetime = datetime_local - chrono::Duration::hours(8);
+
+  let timestamp = datetime.timestamp();
+
+  Ok(timestamp)
 }
 
-pub fn date_from_string(date: &str) -> Result<NaiveDate, Status> {
-  handle(
-    NaiveDate::parse_from_str(date, "%Y-%m-%d"),
-    &format!("Parsing date from str '{}'", date),
-  )
+/// -> get now timestamp
+pub fn naive_datetime_to_timestamp(datetime: NaiveDateTime) -> Result<i64, Status> {
+  let datetime = datetime - chrono::Duration::hours(8);
+  let timestamp = datetime.timestamp();
+
+  Ok(timestamp)
 }
 
-pub fn parse_time(time: NaiveTime) -> Result<u32, Status> {
-  let time_string = format!("{:02}{:02}{:02}", time.hour(), time.minute(), time.second());
-  log::debug!("Parsing time {:?} to string: {}", time, time_string);
+pub fn timestamp_to_naive_datetime(timestamp: i64) -> Result<NaiveDateTime, Status> {
+  // GMT+8
+  let offset = FixedOffset::east_opt(8 * 3600).ok_or_else(|| {
+    log::error!("Invalid offset");
+    Status::InternalServerError
+  })?;
 
-  handle(time_string.parse::<u32>(), "Parsing time")
+  // GMT 0 日期時間
+  let datetime = Utc.timestamp_opt(timestamp, 0).single().ok_or_else(|| {
+    log::error!("Invalid timestamp");
+    Status::InternalServerError
+  })?;
+
+  // 本地日期時間
+  let datetime_local = datetime.with_timezone(&offset).naive_local();
+
+  Ok(datetime_local)
 }
 
 pub fn validate_seat_id(seat_id: u16) -> Result<(), Status> {
-  if seat_id < 1 || seat_id > NUMBER_OF_SEATS {
-    log::error!("Invalid seat_id Error: Seat id out of range");
-    return Err(Status::UnprocessableEntity);
-  }
+  validate_utils::validate_seat_id(seat_id).map_err(|e| {
+    let message = e.code.as_ref();
+    log::error!("seat_id: {}, Failed with error: {}", seat_id, message);
+    Status::UnprocessableEntity
+  })?;
 
   Ok(())
 }
 
-pub fn validate_date(date: NaiveDate) -> Result<(), Status> {
-  let today = get_today();
-  let three_days_later = today + Duration::days(3);
-
-  if date < today || date > three_days_later {
-    log::error!("Invalid date Error: Invalid reservation date");
-    return Err(Status::UnprocessableEntity);
-  }
-
-  Ok(())
-}
-
-pub fn validate_datetime(date: NaiveDate, start_time: u32, end_time: u32) -> Result<(), Status> {
-  let today = get_today();
-  let now = get_now();
-
-  validate_date(date)?;
-
-  if date == today && start_time < now {
-    log::error!("Invalid start_time: start_time < current time");
-    return Err(Status::UnprocessableEntity);
-  }
-
-  if end_time < start_time {
-    log::error!("Invalid start_time: start time > end time");
-    return Err(Status::UnprocessableEntity);
-  }
+pub fn validate_datetime(start_time: i64, end_time: i64) -> Result<(), Status> {
+  validate_utils::validate_datetime(start_time, end_time).map_err(|e| {
+    let message = e.code.as_ref();
+    log::error!(
+      "start_time: {}, end_time: {}, Failed with error: {}",
+      start_time,
+      end_time,
+      message
+    );
+    Status::UnprocessableEntity
+  })?;
 
   Ok(())
 }
@@ -153,7 +171,7 @@ pub fn get_base_url() -> String {
   env::var("BASE_URL").expect("Failed to get base url")
 }
 
-pub fn send_verification_email(email: &str, url: &str) -> Result<(), Status> {
+pub fn send_verification_email(user_email: &str, verification_token: &str) -> Result<(), Status> {
   let email_address_str = env::var("EMAIL_ADDRESS").expect("Failed to get email address");
   let email_password = env::var("EMAIL_PASSWORD").expect("Failed to get email password");
   let email_domain = env::var("EMAIL_DOMAIN").expect("Failed to get email domain");
@@ -162,7 +180,13 @@ pub fn send_verification_email(email: &str, url: &str) -> Result<(), Status> {
     email_address_str.parse::<Mailbox>(),
     "Parsing email address",
   )?;
-  let user_email = handle(email.parse::<Mailbox>(), "Parsing user email")?;
+
+  let user_email = handle(user_email.parse::<Mailbox>(), "Parsing user email")?;
+  let url = format!(
+    "{}/api/verify?verification_token={}",
+    get_base_url(),
+    verification_token
+  );
 
   let email = handle(
     Message::builder()
@@ -190,16 +214,21 @@ pub fn send_verification_email(email: &str, url: &str) -> Result<(), Status> {
   Ok(())
 }
 
-pub fn create_token(userinfo: user::UserInfo) -> Result<String, Status> {
-  let expiration = Utc::now()
-    .checked_add_signed(Duration::hours(1)) // 1 小時後過期
+pub fn create_userinfo_token(user_name: &str, user_role: user::UserRole) -> Result<String, Status> {
+  let duration: Duration = match user_role {
+    user::UserRole::Admin => Duration::hours(24), // 1 天後過期
+    user::UserRole::RegularUser => Duration::hours(1), // 1 小時後過期
+  };
+
+  let exp = Utc::now()
+    .checked_add_signed(duration)
     .expect("valid timestamp")
     .timestamp() as usize;
 
-  let claims = token::Claims {
-    user: userinfo.user_name,
-    role: userinfo.user_role,
-    exp: expiration,
+  let claim = token::UserInfoClaim {
+    user: user_name.to_string(),
+    role: user_role,
+    exp: exp,
   };
 
   let header = Header::new(Algorithm::HS256);
@@ -207,239 +236,168 @@ pub fn create_token(userinfo: user::UserInfo) -> Result<String, Status> {
 
   let encoding_key = EncodingKey::from_secret(key.as_ref());
 
-  let token = handle(encode(&header, &claims, &encoding_key), "Encoding JWT")?;
+  let token = handle(encode(&header, &claim, &encoding_key), "Encoding JWT")?;
 
   Ok(token)
 }
 
-pub fn verify_jwt(token: &str) -> Result<token::Claims, Status> {
+pub fn create_resend_verification_token(
+  email: &str,
+  verification_token: &str,
+  is_resend: bool,
+) -> Result<String, Status> {
+  let exp = Utc::now()
+    .checked_add_signed(Duration::hours(1)) // 1 小時後過期
+    .expect("valid timestamp")
+    .timestamp() as usize; // or u64
+
+  let mut expiration = 0;
+  if is_resend {
+    expiration = Utc::now()
+      .checked_add_signed(Duration::minutes(1))
+      .expect("valid timestamp")
+      .timestamp() as i64;
+  }
+
+  let claim = token::ResendVerificationClaim {
+    email: email.to_string(),
+    verification_token: verification_token.to_string(),
+    expiration: expiration,
+    exp: exp,
+  };
+
+  let header = Header::new(Algorithm::HS256);
   let key = env::var("SECRET_KEY").expect("Failed to get secret key");
 
-  let token = handle(
-    decode::<token::Claims>(
-      token,
-      &DecodingKey::from_secret(key.as_ref()),
-      &Validation::new(Algorithm::HS256),
-    ),
-    "Decoding JWT",
-  )?;
+  let encoding_key = EncodingKey::from_secret(key.as_ref());
 
-  Ok(token.claims)
+  let token = handle(encode(&header, &claim, &encoding_key), "Encoding JWT")?;
+
+  Ok(token)
 }
-
-// TEST
 
 #[cfg(test)]
 mod tests {
 
+  use crate::model::token::{Claim, ResendVerificationClaim, UserInfoClaim};
+
   use super::*;
-  use chrono::{Duration, NaiveDate, NaiveTime};
-  use rocket::http::Status;
-  use validator::{ValidationError, ValidationErrors};
-
-  #[test]
-  fn test_get_today() {
-    assert_eq!(get_today(), Local::now().date_naive());
-  }
-
-  #[test]
-  fn test_get_now() {
-    assert_eq!(
-      get_now(),
-      parse_time(Local::now().naive_local().time()).unwrap()
-    );
-  }
-
-  #[test]
-  fn test_get_datetime() {
-    assert_eq!(get_datetime(), Local::now().naive_local());
-  }
-
-  #[test]
-  fn test_get_tomorrow_midnight() {
-    let tomorrow = Local::now().date_naive().and_hms_opt(0, 0, 0).unwrap() + Duration::days(1);
-    assert_eq!(get_tomorrow_midnight(), tomorrow);
-  }
-
-  #[test]
-  fn test_get_last_week() {
-    let last_week = Local::now().date_naive() - Duration::days(7);
-    assert_eq!(get_last_week(), last_week);
-  }
-
-  #[test]
-  fn test_date_from_string() {
-    let date_str = "2023-12-27";
-    let expected = NaiveDate::parse_from_str(date_str, "%Y-%m-%d").unwrap();
-    assert_eq!(date_from_string(date_str).unwrap(), expected);
-  }
-
-  #[test]
-  fn test_parse_time() {
-    let time = NaiveTime::from_hms_opt(10, 08, 29).expect("Invalid time values");
-    assert_eq!(parse_time(time).unwrap(), 100829);
-  }
-
-  #[test]
-  fn test_validate_seat_id() {
-    let seat_id = 109;
-    assert!(validate_seat_id(seat_id).is_ok());
-
-    assert_eq!(
-      validate_seat_id(0).unwrap_err(),
-      Status::UnprocessableEntity
-    );
-
-    assert_eq!(
-      validate_seat_id(218).unwrap_err(),
-      Status::UnprocessableEntity
-    );
-  }
-
-  #[test]
-  fn test_validate_date() {
-    let today = Local::now().date_naive();
-    let valid_date = today + Duration::days(1);
-    assert!(validate_date(valid_date).is_ok());
-
-    let invalid_date = today - Duration::days(1);
-    assert_eq!(
-      validate_date(invalid_date).unwrap_err(),
-      Status::UnprocessableEntity
-    );
-
-    let invalid_date = today + Duration::days(4);
-    assert_eq!(
-      validate_date(invalid_date).unwrap_err(),
-      Status::UnprocessableEntity
-    );
-  }
-
-  #[test]
-  fn test_validate_datetime() {
-    let date = get_today() + Duration::days(1);
-    let start_time = get_now() + 3600;
-    let end_time = start_time + 3600;
-    assert!(validate_datetime(date, start_time, end_time).is_ok());
-
-    let date = get_today();
-    let start_time = get_now() - 3600;
-    let end_time = start_time + 3600;
-    assert!(validate_datetime(date, start_time, end_time).is_err());
-
-    let date = get_today() + Duration::days(1);
-    let start_time = get_now();
-    let end_time = start_time - 3600;
-    assert!(validate_datetime(date, start_time, end_time).is_err());
-  }
-
-  #[test]
-  fn test_handle_ok() {
-    let result: Result<&str, rocket::http::Status> =
-      handle::<_, std::io::Error>(Ok("Success"), "Test");
-    assert_eq!(result, Ok("Success"));
-  }
 
   #[test]
   fn test_handle_not_found_error() {
-    let result: Result<(), rocket::http::Status> =
-      handle(Err(std::io::Error::from(ErrorKind::NotFound)), "Test");
-    assert_eq!(result, Err(Status::NotFound));
-  }
+    let result = Err::<i32, IoError>(IoError::new(ErrorKind::NotFound, "Not found"));
+    let prefix = "Test";
+    let handled_result = handle(result, prefix);
 
-  #[test]
-  fn test_handle_permission_denied_error() {
-    let result: Result<(), rocket::http::Status> = handle(
-      Err(std::io::Error::from(ErrorKind::PermissionDenied)),
-      "Test",
-    );
-    assert_eq!(result, Err(Status::Forbidden));
-  }
+    assert_eq!(handled_result.unwrap_err(), Status::NotFound);
 
-  #[test]
-  fn test_handle_connection_refused_error() {
-    let result: Result<(), rocket::http::Status> = handle(
-      Err(std::io::Error::new(
-        std::io::ErrorKind::ConnectionRefused,
-        "Connection refused",
-      )),
-      "Test",
-    );
-    assert_eq!(result, Err(Status::ServiceUnavailable));
-  }
-
-  #[test]
-  fn test_handle_other_io_error() {
-    let result: Result<(), rocket::http::Status> = handle::<_, std::io::Error>(
-      Err(std::io::Error::new(
-        std::io::ErrorKind::Other,
-        "Other error",
-      )),
-      "Test",
-    );
-    assert_eq!(result, Err(Status::InternalServerError));
-  }
-
-  #[test]
-  fn test_handle_rusqlite_constraint_violation() {
-    let result: Result<u32, rusqlite::Error> = Err(rusqlite::Error::SqliteFailure(
-      rusqlite::ffi::Error {
-        code: rusqlite::ffi::ErrorCode::ConstraintViolation,
-        extended_code: 0,
-      },
-      None,
+    // permission denied error
+    let result = Err::<i32, IoError>(IoError::new(
+      ErrorKind::PermissionDenied,
+      "Permission denied",
     ));
     let prefix = "Test";
-    assert_eq!(handle(result, prefix), Err(Status::UnprocessableEntity));
+    let handled_result = handle(result, prefix);
+
+    assert_eq!(handled_result.unwrap_err(), Status::Forbidden);
+
+    //connection refused error
+    let result = Err::<i32, IoError>(IoError::new(
+      ErrorKind::ConnectionRefused,
+      "Connection refused",
+    ));
+    let prefix = "Test";
+    let handled_result = handle(result, prefix);
+
+    assert_eq!(handled_result.unwrap_err(), Status::ServiceUnavailable);
   }
 
   #[test]
-  fn test_handle_rusqlite_permission_denied() {
-    let result: Result<(), rocket::http::Status> = handle(
-      Err(rusqlite::Error::SqliteFailure(
-        rusqlite::ffi::Error {
-          code: rusqlite::ffi::ErrorCode::PermissionDenied,
-          extended_code: 0,
-        },
-        None,
-      )),
-      "Test",
-    );
-    assert_eq!(result, Err(Status::Forbidden));
+  fn test_handle_other_error() {
+    let result = Err::<i32, IoError>(IoError::new(ErrorKind::Other, "Other"));
+    let prefix = "Test";
+    let handled_result = handle(result, prefix);
+
+    assert_eq!(handled_result.unwrap_err(), Status::InternalServerError);
   }
 
-  fn create_validation_errors() -> ValidationErrors {
-    let mut validation_errors = ValidationErrors::new();
-
-    validation_errors.add("field1", ValidationError::new("error1"));
-
-    validation_errors.add("field2", ValidationError::new("error2"));
-
-    validation_errors
+  #[test]
+  fn test_get_root() {
+    env::set_var("ROOT", "/app");
+    assert_eq!(get_root(), "/app");
   }
 
-  // #[test]
-  // fn test_handle_validator() {
-  //   let result = Ok(());
-  //   assert_eq!(handle_validator(result), Ok(()));
+  #[test]
+  #[should_panic(expected = "Failed to get root path")]
+  fn test_get_root_miss() {
+    env::remove_var("ROOT");
+    let _ = get_root();
+  }
 
-  //   let validation_errors = create_validation_errors();
-  //   let result = Err(validation_errors);
-  //   let status_result = handle_validator(result);
-  //   assert!(status_result.is_err());
+  #[test]
+  fn test_get_base_url() {
+    env::set_var("BASE_URL", "https://api.email.ntou.edu.tw");
+    assert_eq!(get_base_url(), "https://api.email.ntou.edu.tw");
+  }
 
-  //   match status_result {
-  //     Err(Status::UnprocessableEntity) => {
-  //       assert!(status_result
-  //         .unwrap_err()
-  //         .to_string()
-  //         .contains("Invalid field1 Error: error1"));
-  //       assert!(status_result
-  //         .unwrap_err()
-  //         .to_string()
-  //         .contains("Invalid field2 Error: error2"));
-  //     }
-  //     _ => panic!("Unexpected result variant"),
-  //   }
-  // }
+  #[test]
+  #[should_panic(expected = "Failed to get base url")]
+  fn test_get_base_url_miss() {
+    env::remove_var("BASE_URL");
+    let _ = get_base_url();
+  }
+
+  #[test]
+  fn test_send_verification_email() {
+    let user_email = "test@email.ntou.edu.tw";
+    let verification_token = "token123";
+
+    env::set_var("EMAIL_ADDRESS", "mybot@example.com");
+    env::set_var("EMAIL_PASSWORD", "123456");
+    env::set_var("EMAIL_DOMAIN", "example.com");
+
+    let result = send_verification_email(user_email, verification_token);
+    assert!(result.is_ok());
+
+    env::remove_var("EMAIL_ADDRESS");
+    let result = send_verification_email(user_email, verification_token);
+    assert!(result.is_err());
+  }
+
+  #[test]
+  fn test_create_userinfo_token() {
+    let user_name = "testuser";
+    let user_role = user::UserRole::RegularUser;
+
+    env::set_var("SECRET_KEY", "mysecretkey");
+
+    let token = create_userinfo_token(&user_name, user_role).unwrap();
+    assert!(!token.is_empty());
+
+    let claims = UserInfoClaim::verify_jwt(&token).unwrap();
+    assert_eq!(claims.user, user_name);
+    assert_eq!(claims.role, user_role);
+
+    env::remove_var("SECRET_KEY");
+    let result = create_userinfo_token(&user_name, user_role);
+    assert!(result.is_err());
+  }
+
+  #[test]
+  fn test_create_resend_verification_token() {
+    let email = "test@email.ntou.edu.tw";
+    let verification_token = "token123";
+
+    env::set_var("SECRET_KEY", "mysecretkey");
+
+    let token = create_resend_verification_token(&email, &verification_token, true).unwrap();
+
+    let claims = ResendVerificationClaim::verify_jwt(&token).unwrap();
+    assert_eq!(claims.email, email);
+    assert_eq!(claims.verification_token, verification_token);
+
+    env::remove_var("SECRET_KEY");
+    let result = create_resend_verification_token(&email, &verification_token, true);
+    assert!(result.is_err());
+  }
 }
