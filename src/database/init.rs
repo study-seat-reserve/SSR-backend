@@ -1,3 +1,5 @@
+use std::env;
+
 use super::{
   common::*,
   timeslot::{insert_unavailable_timeslot, is_overlapping_with_unavailable_timeslot},
@@ -70,6 +72,22 @@ pub async fn init_db(pool: &Pool<Sqlite>) {
   .unwrap_or_else(|e| {
     log::error!("Failed to create UnavailableTimeSlots table: {}", e);
     panic!("Failed to create UnavailableTimeSlots table");
+  });
+
+  sqlx::query(
+    "CREATE TABLE IF NOT EXISTS BlackList (
+      user_name TEXT NOT NULL,
+      start_time TEXT NOT NULL,
+      end_time TEXT NOT NULL,
+      PRIMARY KEY (user_name),
+      FOREIGN KEY(user_name) REFERENCES Users(user_name)
+    )",
+  )
+  .execute(pool)
+  .await
+  .unwrap_or_else(|e| {
+    log::error!("Failed to create BlackList table: {}", e);
+    panic!("Failed to create BlackList table");
   });
 
   init_seat_info(&pool).await;
@@ -178,7 +196,13 @@ async fn init_unavailable_timeslots(pool: &Pool<Sqlite>) {
 }
 
 pub async fn clear_table(pool: &Pool<Sqlite>) {
-  let table_names = ["Reservations", "Seats", "Users", "UnavailableTimeSlots"];
+  let table_names = [
+    "BlackList",
+    "Reservations",
+    "Seats",
+    "Users",
+    "UnavailableTimeSlots",
+  ];
   for table_name in table_names {
     let sql = format!("DELETE FROM {}", table_name);
     query(&sql)
@@ -191,9 +215,11 @@ pub async fn clear_table(pool: &Pool<Sqlite>) {
 async fn insert_admin(pool: &Pool<Sqlite>) {
   log::info!("Inserting admin");
 
-  let admin_password = "123456789";
+  let admin_password = env::var("ADMIN_PASSWORD").expect("Failed to get admin password");
+
   let password_hash = hash(admin_password, DEFAULT_COST).expect("Hashing password failed");
-  let admin_email = "a95424945@gmail.com";
+
+  let admin_email = env::var("ADMIN_EMAIL").expect("Failed to get admin email");
 
   query!(
     "INSERT OR IGNORE INTO Users 

@@ -1,4 +1,4 @@
-use super::common::*;
+use super::{common::*, validate_utils::*};
 use regex::Regex;
 use sqlx::{encode::IsNull, sqlite::SqliteArgumentValue, Encode};
 
@@ -29,6 +29,21 @@ pub struct LoginRequest {
   pub user_name: String,
   #[validate(length(min = 8, max = 20))]
   pub password: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Validate)]
+#[validate(schema(function = "validate_ban_request", skip_on_field_errors = false))]
+pub struct BanRequest {
+  #[validate(length(min = 1, max = 20), custom = "validate_username")]
+  pub user_name: String,
+  pub start_time: i64,
+  pub end_time: i64,
+}
+
+#[derive(Debug, Serialize, Deserialize, Validate)]
+pub struct UnBanRequest {
+  #[validate(length(min = 1, max = 20), custom = "validate_username")]
+  pub user_name: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
@@ -109,6 +124,19 @@ fn validate_username(user_name: &str) -> Result<(), ValidationError> {
   if !regex.is_match(user_name) {
     return Err(ValidationError::new(
       "Username must only contain letters and numbers",
+    ));
+  }
+
+  Ok(())
+}
+
+fn validate_ban_request(request: &BanRequest) -> Result<(), ValidationError> {
+  let start_time: i64 = request.start_time;
+  let end_time: i64 = request.end_time;
+
+  if end_time < start_time {
+    return Err(ValidationError::new(
+      "Invalid reservation: start time: Start time is greater than end time",
     ));
   }
 

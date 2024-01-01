@@ -111,6 +111,7 @@ pub fn naive_date_to_timestamp(
   Ok(timestamp)
 }
 
+/// -> get now timestamp
 pub fn naive_datetime_to_timestamp(datetime: NaiveDateTime) -> Result<i64, Status> {
   let datetime = datetime - chrono::Duration::hours(8);
   let timestamp = datetime.timestamp();
