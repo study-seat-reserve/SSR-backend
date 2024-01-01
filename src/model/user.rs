@@ -1,11 +1,9 @@
+use super::{common::*, validate_utils::*};
 use regex::Regex;
-use rusqlite::types::{FromSql, FromSqlError, ValueRef};
-use serde::{Deserialize, Serialize};
-use std::{io::ErrorKind, str::FromStr};
-use validator::{Validate, ValidationError};
+use sqlx::{encode::IsNull, sqlite::SqliteArgumentValue, Encode};
 
 #[derive(Debug, Serialize, Deserialize, Validate)]
-pub struct User {
+pub struct RegisterRequest {
   #[validate(length(min = 1, max = 20), custom = "validate_username")]
   pub user_name: String,
   #[validate(length(min = 8, max = 20))]
@@ -15,36 +13,84 @@ pub struct User {
   pub email: String,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct UserInfo {
   pub user_name: String,
-  pub password: String,
+  pub password_hash: String,
   pub email: String,
   pub user_role: UserRole,
   pub verified: bool,
+  pub verification_token: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, Validate)]
-pub struct LoginCreds {
+pub struct LoginRequest {
   #[validate(length(min = 1, max = 20), custom = "validate_username")]
   pub user_name: String,
   #[validate(length(min = 8, max = 20))]
   pub password: String,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Validate)]
+#[validate(schema(function = "validate_ban_request", skip_on_field_errors = false))]
+pub struct BanRequest {
+  #[validate(length(min = 1, max = 20), custom = "validate_username")]
+  pub user_name: String,
+  pub start_time: i64,
+  pub end_time: i64,
+}
+
+#[derive(Debug, Serialize, Deserialize, Validate)]
+pub struct UnBanRequest {
+  #[validate(length(min = 1, max = 20), custom = "validate_username")]
+  pub user_name: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub enum UserRole {
   RegularUser,
   Admin,
 }
 
-impl FromSql for UserRole {
-  fn column_result(value: ValueRef) -> Result<UserRole, FromSqlError> {
-    match value.as_str() {
-      Ok("RegularUser") => Ok(UserRole::RegularUser),
-      Ok("Admin") => Ok(UserRole::Admin),
-      _ => Err(FromSqlError::InvalidType),
+impl FromRow<'_, SqliteRow> for UserInfo {
+  fn from_row(row: &SqliteRow) -> Result<Self, sqlx::Error> {
+    Ok(UserInfo {
+      user_name: row.try_get("user_name")?,
+      password_hash: row.try_get("password_hash")?,
+      email: row.try_get("email")?,
+      user_role: row.try_get("user_role")?,
+      verified: row.try_get("verified")?,
+      verification_token: row.try_get("verification_token")?,
+    })
+  }
+}
+
+impl<'r> Decode<'r, Sqlite> for UserRole {
+  fn decode(value: SqliteValueRef<'r>) -> Result<Self, BoxDynError> {
+    let value = <&str as Decode<Sqlite>>::decode(value)?;
+
+    match value {
+      "RegularUser" => Ok(UserRole::RegularUser),
+      "Admin" => Ok(UserRole::Admin),
+      _ => Err("Invalid UserRole".into()),
     }
+  }
+}
+
+impl<'q> Encode<'q, sqlx::Sqlite> for UserRole {
+  fn encode_by_ref(&self, buf: &mut Vec<SqliteArgumentValue<'q>>) -> IsNull {
+    // 这里编码你的类型为 SQLite 能理解的格式。
+    // 例如，如果你的类型可以转换为字符串：
+    buf.push(SqliteArgumentValue::Text(self.to_string().into()));
+
+    // 如果你的类型总是产生非空值，返回 IsNull::No
+    IsNull::No
+  }
+}
+
+impl Type<Sqlite> for UserRole {
+  fn type_info() -> SqliteTypeInfo {
+    <&str as Type<Sqlite>>::type_info()
   }
 }
 
@@ -82,4 +128,126 @@ fn validate_username(user_name: &str) -> Result<(), ValidationError> {
   }
 
   Ok(())
+}
+
+fn validate_ban_request(request: &BanRequest) -> Result<(), ValidationError> {
+  let start_time: i64 = request.start_time;
+  let end_time: i64 = request.end_time;
+
+  if end_time < start_time {
+    return Err(ValidationError::new(
+      "Invalid reservation: start time: Start time is greater than end time",
+    ));
+  }
+
+  Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+  use regex::Regex;
+  use sqlx::sqlite;
+  use std::str::FromStr;
+
+  #[test]
+  fn test_register_request() {
+    // Valid
+    let valid_request = RegisterRequest {
+      user_name: "testuser".to_string(),
+      password: "testpassword".to_string(),
+      email: "test@email.ntou.edu.tw".to_string(),
+    };
+
+    assert!(valid_request.validate().is_ok());
+
+    // Invalid
+    let invalid_username_request = RegisterRequest {
+      user_name: "!testuser".to_string(),
+      password: "testpassword".to_string(),
+      email: "test@email.ntou.edu.tw".to_string(),
+    };
+    assert!(invalid_username_request.validate().is_err());
+
+    let invalid_password_request = RegisterRequest {
+      user_name: "testuser".to_string(),
+      password: "test".to_string(),
+      email: "test@email.ntou.edu.tw".to_string(),
+    };
+    assert!(invalid_password_request.validate().is_err());
+
+    let invalid_email_request = RegisterRequest {
+      user_name: "testuser".to_string(),
+      password: "testpassword".to_string(),
+      email: "invalid_email".to_string(),
+    };
+    assert!(invalid_email_request.validate().is_err());
+  }
+
+  #[test]
+  fn test_user_role_to_string() {
+    let regular_user = UserRole::RegularUser;
+    assert_eq!(regular_user.to_string(), "RegularUser");
+
+    let admin = UserRole::Admin;
+    assert_eq!(admin.to_string(), "Admin");
+  }
+
+  #[test]
+  fn test_user_role_from_str() {
+    let regular_user_str = "RegularUser";
+    let regular_user_result = UserRole::from_str(regular_user_str);
+    assert!(regular_user_result.is_ok());
+    assert_eq!(regular_user_result.unwrap(), UserRole::RegularUser);
+
+    let admin_str = "Admin";
+    let admin_result = UserRole::from_str(admin_str);
+    assert!(admin_result.is_ok());
+    assert_eq!(admin_result.unwrap(), UserRole::Admin);
+
+    let test_str = "NotAUserRole";
+    let test_result = UserRole::from_str(test_str);
+    assert!(test_result.is_err());
+  }
+
+  // Test validate_username function
+  #[test]
+  fn test_validate_username() {
+    // Valid
+    assert!(validate_username("testuser").is_ok());
+    assert!(validate_username("testuser123").is_ok());
+    // Invalid
+    assert!(validate_username("testuser!").is_err());
+    assert!(validate_username("test user ").is_err());
+  }
+
+  #[test]
+  fn test_login_request_validation() {
+    // Valid
+    let valid_request = LoginRequest {
+      user_name: "testuser".to_string(),
+      password: "validpassword".to_string(),
+    };
+
+    assert!(valid_request.validate().is_ok());
+
+    // Invalid username
+    let invalid_username_request = LoginRequest {
+      user_name: "!testuser!".to_string(),
+      password: "testpassword".to_string(),
+    };
+
+    assert!(invalid_username_request.validate().is_err());
+
+    // Invalid password
+    let invalid_password_request = LoginRequest {
+      user_name: "testuser".to_string(),
+      password: "test".to_string(),
+    };
+
+    assert!(invalid_password_request.validate().is_err());
+  }
+
+  #[test]
+  fn test_from_row() {}
 }

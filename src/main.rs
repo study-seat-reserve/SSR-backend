@@ -5,6 +5,8 @@ mod model;
 mod timer;
 mod utils;
 
+use std::env;
+
 use api::*;
 use dotenv::dotenv;
 use rocket::{
@@ -68,8 +70,27 @@ async fn main() {
   dotenv().ok();
   logger::init_logger(log::LevelFilter::Info);
 
-  database::init_db();
-  tokio::spawn(timer::start());
+  let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
+  // let pool = SqlitePool::connect_lazy(&database_url).expect("Failed to create pool.");
+
+  let pool = sqlx::pool::PoolOptions::new()
+    .max_lifetime(None)
+    .idle_timeout(None)
+    .connect(&database_url)
+    .await
+    .expect("Failed to create pool");
+
+  // let pool = SqlitePool::connect(&database_url)
+  //   .await
+  //   .expect("Failed to create pool");
+  let pool_clone = pool.clone();
+
+  // database::init::clear_table(&pool).await;
+  database::init::init_db(&pool_clone).await;
+
+  tokio::spawn(async move {
+    timer::start(&pool_clone).await;
+  });
 
   let catchers = catchers![
     handle_unprocessable_entity,
@@ -84,22 +105,45 @@ async fn main() {
     login,
     show_current_seats_status,
     reserve_seat,
-    show_seats_status_by_time,
+    show_seats_status_in_specific_timeslots,
     show_seat_reservations,
     update_reservation,
     delete_reservation_time,
     display_user_reservations,
     email_verify,
+    resend_verification_email,
+    set_unavailable_timeslots,
+    set_seat_availability,
+    add_user_to_blacklist,
+    remove_user_from_blacklist,
   ];
   let server = rocket::build()
     .register("/", catchers)
     .mount("/", routes)
     .attach(CORS)
-    // .manage()
+    .manage(pool)
     .launch();
 
   tokio::select! {
       _ = server => {},
       _ = tokio::signal::ctrl_c() => {},
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[tokio::test]
+  async fn test_info() {
+    let cors = CORS;
+
+    let info = cors.info();
+
+    match info.kind {
+      rocket::fairing::Kind::Response => (),
+      _ => panic!("Expected Kind::Response"),
+    }
+    assert_eq!(info.name, "Add CORS headers to responses");
   }
 }

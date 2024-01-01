@@ -1,5 +1,5 @@
-use crate::utils::*;
 use ansi_term::Colour;
+use chrono::Local;
 use env_logger::Target;
 use log::{Level, LevelFilter};
 use regex;
@@ -19,7 +19,7 @@ pub fn init_logger(level: LevelFilter) {
     fs::create_dir_all(&path).expect("Failed to create logfiles");
   }
 
-  let now = get_today();
+  let now = Local::now().date_naive();
   let file_name = format!("{}/logfiles/{}.txt", root, now);
 
   let file = OpenOptions::new()
@@ -44,7 +44,7 @@ pub fn init_logger(level: LevelFilter) {
 
       let message = format!(
         "[{}] [{}] {}",
-        get_datetime().format("%Y-%m-%d %H:%M:%S%.3f"),
+        Local::now().naive_local().format("%Y-%m-%d %H:%M:%S%.3f"),
         level_style,
         record.args()
       );
@@ -62,4 +62,33 @@ fn remove_ansi_escape_codes(s: &str) -> String {
     .unwrap()
     .replace_all(s, "")
     .to_string()
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+  use tempdir::TempDir;
+
+  #[test]
+  fn test_init_logger() {
+    let temp_dir = TempDir::new("logfiles").expect("Failed to create temp directory");
+    let temp_path = temp_dir.path();
+
+    env::set_var("ROOT", temp_path);
+
+    init_logger(LevelFilter::Info);
+
+    let file_name = format!("{}/{}.txt", temp_path.display(), Local::now().timestamp());
+
+    assert!(Path::new(&file_name).exists());
+
+    temp_dir.close().expect("Failed to close temp directory");
+  }
+
+  #[test]
+  fn test_remove_ansi_escape_codes() {
+    let input = "\x1B[31mtest\x1B[0m";
+    let expected = "test";
+    assert_eq!(remove_ansi_escape_codes(input), expected);
+  }
 }
