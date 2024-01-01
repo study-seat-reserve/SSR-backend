@@ -8,7 +8,10 @@ pub struct Reservation {
 }
 
 #[derive(Debug, Deserialize, Serialize, Validate)]
-#[validate(schema(function = "validate_reservation_request", skip_on_field_errors = false))]
+#[validate(schema(
+  function = "validate_reservation_request",
+  skip_on_field_errors = false
+))]
 pub struct InsertReservationRequest {
   #[validate(custom = "validate_seat_id")]
   pub seat_id: u16,
@@ -17,7 +20,10 @@ pub struct InsertReservationRequest {
 }
 
 #[derive(Debug, Deserialize, Serialize, Validate)]
-#[validate(schema(function = "validate_update_reservation_request", skip_on_field_errors = false))]
+#[validate(schema(
+  function = "validate_update_reservation_request",
+  skip_on_field_errors = false
+))]
 pub struct UpdateReservationRequest {
   pub start_time: i64,
   pub end_time: i64,
@@ -26,7 +32,10 @@ pub struct UpdateReservationRequest {
 }
 
 #[derive(Debug, Deserialize, Serialize, Validate)]
-#[validate(schema(function = "validate_delete_reservation_request", skip_on_field_errors = false))]
+#[validate(schema(
+  function = "validate_delete_reservation_request",
+  skip_on_field_errors = false
+))]
 pub struct DeleteReservationRequest {
   pub start_time: i64,
   pub end_time: i64,
@@ -67,7 +76,9 @@ impl FromRow<'_, SqliteRow> for Reservation {
   }
 }
 
-fn validate_update_reservation_request(request: &UpdateReservationRequest) -> Result<(), ValidationError> {
+fn validate_update_reservation_request(
+  request: &UpdateReservationRequest,
+) -> Result<(), ValidationError> {
   let start_time = request.start_time;
   let end_time = request.end_time;
   let new_start_time = request.new_start_time;
@@ -78,7 +89,9 @@ fn validate_update_reservation_request(request: &UpdateReservationRequest) -> Re
   on_the_same_day(start_time, new_start_time)
 }
 
-fn validate_delete_reservation_request(request: &DeleteReservationRequest) -> Result<(), ValidationError> {
+fn validate_delete_reservation_request(
+  request: &DeleteReservationRequest,
+) -> Result<(), ValidationError> {
   let start_time = request.start_time;
   let end_time = request.end_time;
 
@@ -106,7 +119,7 @@ mod tests {
       end_time,
     };
 
-    assert!(validate_reservation(&request).is_ok());
+    assert!(validate_reservation_request(&request).is_ok());
 
     let start_time =
       naive_date_to_timestamp(now.date(), now.hour(), now.minute(), now.second()).unwrap();
@@ -119,7 +132,7 @@ mod tests {
       end_time,
     };
 
-    assert!(validate_reservation(&request).is_err());
+    assert!(validate_reservation_request(&request).is_err());
   }
 
   #[test]
@@ -144,7 +157,7 @@ mod tests {
       new_end_time,
     };
 
-    assert!(validate_update_reservation(&request).is_ok());
+    assert!(validate_update_reservation_request(&request).is_ok());
 
     // Invalid
     let now = get_now();
@@ -167,7 +180,7 @@ mod tests {
       new_end_time,
     };
 
-    assert!(validate_update_reservation(&request).is_err());
+    assert!(validate_update_reservation_request(&request).is_err());
   }
 
   #[test]
@@ -185,7 +198,7 @@ mod tests {
       end_time,
     };
 
-    assert!(validate_delete_reservation(&request).is_ok());
+    assert!(validate_delete_reservation_request(&request).is_ok());
 
     // Invalid
     let now = get_now();
@@ -200,6 +213,6 @@ mod tests {
       end_time,
     };
 
-    assert!(validate_delete_reservation(&request).is_err());
+    assert!(validate_delete_reservation_request(&request).is_err());
   }
 }

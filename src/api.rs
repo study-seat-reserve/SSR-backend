@@ -521,7 +521,6 @@ pub async fn remove_user_from_blacklist(
 
   log::info!("Remove user from blacklist successfully");
   Ok(())
-
 }
 /*
 管理者設定unavaliable time slot
@@ -1041,70 +1040,70 @@ mod tests {
 
   #[tokio::test]
   async fn test_set_seat_availability() {}
+}
 
-  /////////////////////////////////////////////////////////////
-  // async fn test_show_seats_status_by_time_db_error() {
-  //   database::init_db();
-  //   let db_path = format!("{}/SSR.db3", utils::get_root());
-  //   std::fs::remove_file(db_path).unwrap();
+/////////////////////////////////////////////////////////////
+// async fn test_show_seats_status_by_time_db_error() {
+//   database::init_db();
+//   let db_path = format!("{}/SSR.db3", utils::get_root());
+//   std::fs::remove_file(db_path).unwrap();
 
-  //   let date = "2023-12-28";
-  //   let start_time = 10000;
-  //   let end_time = 12000;
+//   let date = "2023-12-28";
+//   let start_time = 10000;
+//   let end_time = 12000;
 
-  //   let result = show_seats_status_by_time(date, start_time, end_time).await;
+//   let result = show_seats_status_by_time(date, start_time, end_time).await;
 
-  //   assert_eq!(result.unwrap_err(), Status::InternalServerError);
-  // }
+//   assert_eq!(result.unwrap_err(), Status::InternalServerError);
+// }
 
-  // #[tokio::test]
-  // async fn test_show_seat_reservations_success() {
-  //   let date = "2023-12-28";
-  //   let seat_id = 125;
+// #[tokio::test]
+// async fn test_show_seat_reservations_success() {
+//   let date = "2023-12-28";
+//   let seat_id = 125;
 
-  //   let result = show_seat_reservations(&date, seat_id).await;
+//   let result = show_seat_reservations(&date, seat_id).await;
 
-  //   assert!(result.is_ok());
+//   assert!(result.is_ok());
 
-  //   let result_str = result.unwrap();
-  //   let timeslots: Vec<(u32, u32)> =
-  //     serde_json::from_str(&result_str).expect("Result should be timeslots JSON");
+//   let result_str = result.unwrap();
+//   let timeslots: Vec<(u32, u32)> =
+//     serde_json::from_str(&result_str).expect("Result should be timeslots JSON");
 
-  //   // 檢查 seat_id 相等
-  //   assert!(timeslots.iter().all(|(start, end)| start < end));
-  // }
+//   // 檢查 seat_id 相等
+//   assert!(timeslots.iter().all(|(start, end)| start < end));
+// }
 
-  // #[tokio::test]
-  // async fn test_show_seat_reservations_invalid_seat() {
-  //   let date = "2023-12-28";
-  //   let seat_id = 0; // 不存在的座位
+// #[tokio::test]
+// async fn test_show_seat_reservations_invalid_seat() {
+//   let date = "2023-12-28";
+//   let seat_id = 0; // 不存在的座位
 
-  //   let result = show_seat_reservations(&date, seat_id).await;
+//   let result = show_seat_reservations(&date, seat_id).await;
 
-  //   assert_eq!(result.unwrap_err(), Status::UnprocessableEntity);
-  // }
+//   assert_eq!(result.unwrap_err(), Status::UnprocessableEntity);
+// }
 
-  // #[tokio::test]
-  // async fn test_show_seat_reservations_invalid_date() {
-  //   let date = "2023-15-32"; // 不存在的日期
-  //   let seat_id = 120;
+// #[tokio::test]
+// async fn test_show_seat_reservations_invalid_date() {
+//   let date = "2023-15-32"; // 不存在的日期
+//   let seat_id = 120;
 
-  //   let result = show_seat_reservations(&date, seat_id).await;
+//   let result = show_seat_reservations(&date, seat_id).await;
 
-  //   assert_eq!(result.unwrap_err(), Status::UnprocessableEntity);
-  // }
+//   assert_eq!(result.unwrap_err(), Status::UnprocessableEntity);
+// }
 
-  // #[tokio::test]
-  // async fn test_show_seat_reservations_db_error() {
-  //   database::init_db();
-  //   let db_path = format!("{}/SSR.db3", utils::get_root());
-  //   std::fs::remove_file(db_path).unwrap();
+// #[tokio::test]
+// async fn test_show_seat_reservations_db_error() {
+//   database::init_db();
+//   let db_path = format!("{}/SSR.db3", utils::get_root());
+//   std::fs::remove_file(db_path).unwrap();
 
-  //   let date = "2023-12-28";
-  //   let seat_id = 120;
+//   let date = "2023-12-28";
+//   let seat_id = 120;
 
-  //   let result = show_seat_reservations(&date, seat_id).await;
+//   let result = show_seat_reservations(&date, seat_id).await;
 
-  //   assert_eq!(result.unwrap_err(), Status::InternalServerError);
-  // }}
-
+//   assert_eq!(result.unwrap_err(), Status::InternalServerError);
+// }}

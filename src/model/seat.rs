@@ -1,137 +1,194 @@
-use super::{common::*, validate_utils::*};
+use super::{common::*, user};
+use crate::utils::handle;
 
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
-pub struct Seat {
-  pub seat_id: u16,
-  pub available: bool,
-  pub other_info: Option<String>,
+use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation};
+use rocket::{
+  http::Status,
+  request::{FromRequest, Outcome, Request},
+};
+use std::env;
+
+pub trait Claim: Sized {
+  fn verify_jwt(token: &str) -> Result<Self, Status>;
 }
 
-#[derive(Serialize, Deserialize)]
-pub struct SeatStatus {
-  pub seat_id: u16,
-  pub status: Status,
+#[derive(Debug, Serialize, Deserialize)]
+pub struct UserInfoClaim {
+  pub user: String,
+  pub role: user::UserRole,
+  pub exp: usize,
 }
 
-#[derive(Serialize, Deserialize)]
-pub struct AllSeatsStatus {
-  pub seats: Vec<SeatStatus>,
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ResendVerificationClaim {
+  pub email: String,
+  pub verification_token: String,
+  pub expiration: i64,
+  pub exp: usize,
 }
 
-#[derive(Serialize, PartialEq, Debug, Deserialize)]
-pub enum Status {
-  Available,
-  Unavailable,
-  Borrowed,
+impl Claim for UserInfoClaim {
+  fn verify_jwt(token: &str) -> Result<UserInfoClaim, Status> {
+    let key = env::var("SECRET_KEY").expect("Failed to get secret key");
+
+    let token = handle(
+      decode::<UserInfoClaim>(
+        token,
+        &DecodingKey::from_secret(key.as_ref()),
+        &Validation::new(Algorithm::HS256),
+      ),
+      "Decoding JWT",
+    )?;
+
+    Ok(token.claims)
+  }
 }
 
-#[derive(Debug, Serialize, Deserialize, Validate)]
-pub struct SeatAvailabilityRequest {
-  #[validate(custom = "validate_seat_id")]
-  pub seat_id: u16,
-  pub available: bool,
-}
+#[rocket::async_trait]
+impl<'r> FromRequest<'r> for UserInfoClaim {
+  type Error = ();
 
-impl ToString for Status {
-  fn to_string(&self) -> String {
-    match *self {
-      Status::Available => "Available".to_owned(),
-      Status::Unavailable => "Unavailable".to_owned(),
-      Status::Borrowed => "Borrowed".to_owned(),
+  async fn from_request(request: &'r Request<'_>) -> Outcome<Self, Self::Error> {
+    let headers = request.headers().get_one("Authorization");
+    match headers {
+      Some(header) => {
+        let token = header.replace("Bearer ", "");
+
+        match Self::verify_jwt(&token) {
+          Ok(claims) => Outcome::Success(claims),
+          Err(_) => Outcome::Failure((Status::Unauthorized, ())),
+        }
+      }
+      None => Outcome::Failure((Status::BadRequest, ())),
     }
   }
 }
 
-impl FromStr for Status {
-  type Err = std::io::Error;
+impl Claim for ResendVerificationClaim {
+  fn verify_jwt(token: &str) -> Result<ResendVerificationClaim, Status> {
+    let key = env::var("SECRET_KEY").expect("Failed to get secret key");
 
-  fn from_str(s: &str) -> Result<Self, Self::Err> {
-    match s {
-      "Available" => Ok(Status::Available),
-      "Unavailable" => Ok(Status::Unavailable),
-      "Borrowed" => Ok(Status::Borrowed),
-      _ => Err(std::io::Error::new(
-        ErrorKind::InvalidInput,
-        "Provided string does not match any Status variant",
-      )),
+    let token = handle(
+      decode::<ResendVerificationClaim>(
+        token,
+        &DecodingKey::from_secret(key.as_ref()),
+        &Validation::new(Algorithm::HS256),
+      ),
+      "Decoding JWT",
+    )?;
+
+    Ok(token.claims)
+  }
+}
+
+#[rocket::async_trait]
+impl<'r> FromRequest<'r> for ResendVerificationClaim {
+  type Error = ();
+
+  async fn from_request(request: &'r Request<'_>) -> Outcome<Self, Self::Error> {
+    let headers = request.headers().get_one("Authorization");
+    match headers {
+      Some(header) => {
+        let token = header.replace("Bearer ", "");
+
+        match Self::verify_jwt(&token) {
+          Ok(claims) => Outcome::Success(claims),
+          Err(_) => Outcome::Failure((Status::Unauthorized, ())),
+        }
+      }
+      None => Outcome::Failure((Status::BadRequest, ())),
     }
   }
 }
 
 #[cfg(test)]
 mod tests {
+  use crate::model::user::UserRole;
+
   use super::*;
 
   #[test]
-  fn test_seat_serial_deserial() {
-    let seat = Seat {
-      seat_id: 109, // Maximum u16 value
-      available: true,
-      other_info: Some("Extra information".to_string()),
+  fn test_verify_jwt_user_info_claim() {
+    env::set_var("SECRET_KEY", "your_secret_key");
+
+    let user_info_claim = UserInfoClaim {
+      user: "testuser".to_string(),
+      role: UserRole::RegularUser,
+      exp: 1234567890,
     };
 
-    let json = serde_json::to_string(&seat).unwrap();
-    let deserialized_seat: Seat = serde_json::from_str(&json).unwrap();
+    let token = jsonwebtoken::encode(
+      &jsonwebtoken::Header::default(),
+      &user_info_claim,
+      &jsonwebtoken::EncodingKey::from_secret("your_secret_key".as_ref()),
+    )
+    .expect("Failed to encode JWT");
 
-    assert_eq!(seat, deserialized_seat);
-  }
+    let result = UserInfoClaim::verify_jwt(&token);
+    assert!(result.is_ok());
 
-  #[test]
-  fn test_seat() {
-    let seat = Seat {
-      seat_id: 109,
-      available: true,
-      other_info: None,
-    };
-
-    assert_eq!(seat.other_info, None);
-  }
-
-  #[test]
-  fn test_to_string() {
-    let status = Status::Available;
-    assert_eq!(status.to_string(), "Available");
-
-    let status = Status::Unavailable;
-    assert_eq!(status.to_string(), "Unavailable");
-
-    let status = Status::Borrowed;
-    assert_eq!(status.to_string(), "Borrowed");
-  }
-
-  #[test]
-  fn test_from_str() {
-    let status = Status::from_str("Available").unwrap();
-    assert_eq!(status, Status::Available);
-
-    let status = Status::from_str("Unavailable").unwrap();
-    assert_eq!(status, Status::Unavailable);
-
-    let status = Status::from_str("Borrowed").unwrap();
-    assert_eq!(status, Status::Borrowed);
-
-    let result = Status::from_str("Invalid");
+    let invalid_token = "invalid_token";
+    let result = UserInfoClaim::verify_jwt(invalid_token);
     assert!(result.is_err());
   }
 
   #[test]
-  fn test_seat_availability() {
-    let request = SeatAvailabilityRequest {
-      seat_id: 109,
-      available: true,
-    };
-    assert!((&request).validate().is_ok());
+  fn test_verify_jwt_resend_verification_claim() {
+    env::set_var("SECRET_KEY", "your_secret_key");
 
-    let request = SeatAvailabilityRequest {
-      seat_id: 0,
-      available: true,
+    let resend_verification_claim = ResendVerificationClaim {
+      email: "test@email.ntou.edu.tw".to_string(),
+      verification_token: "verificationtoken".to_string(),
+      expiration: 1234567890,
+      exp: 1234567890,
     };
-    assert!((&request).validate().is_err());
 
-    let request = SeatAvailabilityRequest {
-      seat_id: 218,
-      available: true,
+    let token = jsonwebtoken::encode(
+      &jsonwebtoken::Header::default(),
+      &resend_verification_claim,
+      &jsonwebtoken::EncodingKey::from_secret("your_secret_key".as_ref()),
+    )
+    .expect("Failed to encode JWT");
+
+    let result = ResendVerificationClaim::verify_jwt(&token);
+    assert!(result.is_ok());
+
+    let invalid_token = "invalid_token";
+    let result = ResendVerificationClaim::verify_jwt(invalid_token);
+    assert!(result.is_err());
+  }
+
+  #[tokio::test]
+  async fn test_from_request_user_info_claim() {
+    env::set_var("SECRET_KEY", "your_secret_key");
+
+    let user_info_claim = UserInfoClaim {
+      user: "testuser".to_string(),
+      role: UserRole::RegularUser,
+      exp: 1234567890,
     };
-    assert!((&request).validate().is_err());
+
+    let token = jsonwebtoken::encode(
+      &jsonwebtoken::Header::default(),
+      &user_info_claim,
+      &jsonwebtoken::EncodingKey::from_secret("your_secret_key".as_ref()),
+    )
+    .expect("Failed to encode JWT");
+
+    env::set_var("SECRET_KEY", "your_secret_key");
+
+    let resend_verification_claim = ResendVerificationClaim {
+      email: "test@email.ntou.edu.tw".to_string(),
+      verification_token: "verificationtoken".to_string(),
+      expiration: 1234567890,
+      exp: 1234567890,
+    };
+
+    let token = jsonwebtoken::encode(
+      &jsonwebtoken::Header::default(),
+      &resend_verification_claim,
+      &jsonwebtoken::EncodingKey::from_secret("your_secret_key".as_ref()),
+    )
+    .expect("Failed to encode JWT");
   }
 }
