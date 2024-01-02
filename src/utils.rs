@@ -74,11 +74,13 @@ pub fn handle_validator(result: Result<(), validator::ValidationErrors>) -> Resu
 }
 
 pub fn get_today() -> NaiveDate {
-  Local::now().date_naive()
+  let taipei_offset = FixedOffset::east_opt(8 * 3600).expect("Invalid offset");
+  Local::now().with_timezone(&taipei_offset).date_naive()
 }
 
 pub fn get_now() -> NaiveDateTime {
-  Local::now().naive_local()
+  let taipei_offset = FixedOffset::east_opt(8 * 3600).expect("Invalid offset");
+  Local::now().with_timezone(&taipei_offset).naive_local()
 }
 
 pub fn time_to_string(timestamp: i64) -> Result<String, Status> {
