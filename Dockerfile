@@ -32,7 +32,7 @@ RUN touch src/main.rs && cargo build --release
 # 第二階段：創建運行映像
 FROM debian:bullseye-slim
 
-RUN apt-get update && apt-get install -y openssl libssl1.1 && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y openssl libssl1.1 ca-certificates && rm -rf /var/lib/apt/lists/*
 
 # 複製執行檔和資料庫檔案
 COPY --from=builder /usr/src/study_seat_reserve/target/release/study_seat_reserve /usr/src/study_seat_reserve/study_seat_reserve
