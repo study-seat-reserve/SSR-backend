@@ -248,3 +248,40 @@ pub async fn check_unfinished_reservations(
 
   Ok(has_unfinished_reservation)
 }
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+  use sqlx::sqlite::SqlitePoolOptions;
+  use tokio::runtime::Runtime;
+
+  #[tokio::test]
+  async fn test_reserve_seat() {
+    let rt = Runtime::new().unwrap();
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    let pool: sqlx::SqlitePool = rt.block_on(async {
+      let pool = SqlitePoolOptions::new()
+        .max_connections(1)
+        .connect(":memory:")
+        .await
+        .unwrap();
+      pool
+    });
+
+    let (user_name, seat_id, start_time, end_time) = ("user1", 1, 1641257600, 1641259200);
+
+    let result = reserve_seat(&pool, user_name, seat_id, start_time, end_time).await;
+    assert!(result.is_ok());
+
+    let result = reserve_seat(&pool, user_name, 0, start_time, end_time).await;
+    assert_eq!(result.unwrap_err(), Status::UnprocessableEntity);
+
+    let (start_time, end_time) = (1641259200, 1641257600);
+    let result = reserve_seat(&pool, user_name, seat_id, start_time, end_time).await;
+    assert_eq!(result.unwrap_err(), Status::UnprocessableEntity);
+
+    let (start_time, end_time) = (1641257400, 1641257800);
+    let result = reserve_seat(&pool, user_name, seat_id, start_time, end_time).await;
+    assert_eq!(result.unwrap_err(), Status::Conflict);
+  }
+}

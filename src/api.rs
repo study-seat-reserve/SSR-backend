@@ -662,6 +662,7 @@ mod tests {
       .dispatch();
 
     assert_eq!(response.status(), Status::Ok);
+
     assert!(response
       .into_string()
       .unwrap()
@@ -770,6 +771,28 @@ mod tests {
   #[tokio::test]
   async fn test_show_current_seats_status() {
     let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
+
+    let conn = pool.acquire().await.unwrap();
+
+    sqlx::query!(
+      "CREATE TABLE Seats (
+             seat_id INTEGER PRIMARY KEY,
+             available INTEGER
+         )"
+    )
+    .execute(&conn)
+    .await
+    .unwrap();
+
+    sqlx::query!(
+      "INSERT INTO Seats (seat_id, available)
+         VALUES 
+            (1, 1),
+            (2, 0)"
+    )
+    .execute(&conn)
+    .await
+    .unwrap();
 
     let rocket = rocket::build().manage(pool.clone());
     let client = Client::tracked(rocket).expect("valid rocket instance");

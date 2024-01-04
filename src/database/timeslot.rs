@@ -152,7 +152,7 @@ mod tests {
     let pool = Pool::connect("sqlite::memory:").await.unwrap();
 
     let start_time = 1672531200; // 2024-01-01 00:00:00
-    let end_time = 1672540800; // 2022-01-01 02:00:00
+    let end_time = 1672540800; // 2024-01-01 02:00:00
 
     insert_unavailable_timeslot(&pool, start_time, end_time)
       .await

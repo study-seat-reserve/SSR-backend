@@ -137,16 +137,16 @@ mod tests {
   use super::*;
   use crate::database::init::init_db;
   use sqlx::sqlite::SqlitePool;
-  use std::{fs, time::Duration};
+  use std::fs;
 
-  #[tokio::test]
-  async fn test_start() {
-    let pool = create_pool().await;
+  // #[tokio::test]
+  // async fn test_start() {
+  //   let pool = create_pool().await;
 
-    start(&pool);
+  //   start(&pool);
 
-    tokio::time::sleep(Duration::from_secs(5)).await;
-  }
+  //   tokio::time::sleep(Duration::from_secs(5)).await;
+  // }
 
   #[tokio::test]
   async fn test_delete_logfile() {

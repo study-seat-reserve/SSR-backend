@@ -284,7 +284,7 @@ mod tests {
   use super::*;
 
   #[test]
-  fn test_handle_not_found_error() {
+  fn test_handle_error() {
     let result = Err::<i32, IoError>(IoError::new(ErrorKind::NotFound, "Not found"));
     let prefix = "Test";
     let handled_result = handle(result, prefix);
@@ -310,10 +310,7 @@ mod tests {
     let handled_result = handle(result, prefix);
 
     assert_eq!(handled_result.unwrap_err(), Status::ServiceUnavailable);
-  }
 
-  #[test]
-  fn test_handle_other_error() {
     let result = Err::<i32, IoError>(IoError::new(ErrorKind::Other, "Other"));
     let prefix = "Test";
     let handled_result = handle(result, prefix);

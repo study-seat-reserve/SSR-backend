@@ -105,12 +105,12 @@ mod tests {
     assert!(on_the_same_day(start_time, end_time).is_err());
 
     let now = get_now();
-    let tomorrow = now.date() - chrono::Duration::days(1);
+    let yesterday = now.date() - chrono::Duration::days(1);
 
     let start_time =
       naive_date_to_timestamp(now.date(), now.hour(), now.minute(), now.second()).unwrap();
     let end_time =
-      naive_date_to_timestamp(tomorrow, now.hour(), now.minute(), now.second()).unwrap();
+      naive_date_to_timestamp(yesterday, now.hour(), now.minute(), now.second()).unwrap();
 
     assert!(on_the_same_day(start_time, end_time).is_err());
   }
