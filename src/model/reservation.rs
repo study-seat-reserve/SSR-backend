@@ -106,7 +106,7 @@ mod tests {
   use chrono::Timelike;
 
   #[test]
-  fn test_validate_reservation() {
+  fn test_validate_reservation_request() {
     let now = get_now();
     let start_time =
       naive_date_to_timestamp(now.date(), now.hour(), now.minute(), now.second()).unwrap();
@@ -136,7 +136,7 @@ mod tests {
   }
 
   #[test]
-  fn test_validate_update_reservation() {
+  fn test_validate_update_reservation_request() {
     // Valid
     let now = get_now();
 
@@ -184,7 +184,7 @@ mod tests {
   }
 
   #[test]
-  fn test_validate_delete_reservation() {
+  fn test_validate_delete_reservation_request() {
     // Valid
     let now = get_now();
 

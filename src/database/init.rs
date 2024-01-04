@@ -240,3 +240,227 @@ async fn insert_admin(pool: &Pool<Sqlite>) {
     panic!("Failed to insert admin: {}", e);
   });
 }
+
+#[cfg(test)]
+mod test {
+  use sqlx::Row;
+
+  use super::*;
+  use crate::utils;
+
+  #[tokio::test]
+  async fn test_init_db() {
+    let pool = Pool::connect("sqlite::memory:").await.unwrap();
+
+    sqlx::query("DROP TABLE IF EXISTS Seats")
+      .execute(&pool)
+      .await
+      .unwrap();
+    sqlx::query("DROP TABLE IF EXISTS Users")
+      .execute(&pool)
+      .await
+      .unwrap();
+    sqlx::query("DROP TABLE IF EXISTS Reservations")
+      .execute(&pool)
+      .await
+      .unwrap();
+    sqlx::query("DROP TABLE IF EXISTS UnavailableTimeSlots")
+      .execute(&pool)
+      .await
+      .unwrap();
+
+    // 呼叫測試函數
+    super::init_db(&pool).await;
+
+    // 檢查 Seats 表是否正確創建
+    let seats_exist =
+      sqlx::query("SELECT name FROM sqlite_master WHERE type='table' AND name='Seats'")
+        .fetch_optional(&pool)
+        .await
+        .unwrap()
+        .is_some();
+    assert!(seats_exist);
+
+    // 檢查其他表是否也正確創建
+    let users_exist =
+      sqlx::query("SELECT name FROM sqlite_master WHERE type='table' AND name='Users'")
+        .fetch_optional(&pool)
+        .await
+        .unwrap()
+        .is_some();
+    assert!(users_exist);
+
+    let reservations_exist =
+      sqlx::query("SELECT name FROM sqlite_master WHERE type='table' AND name='Reservations'")
+        .fetch_optional(&pool)
+        .await
+        .unwrap()
+        .is_some();
+    assert!(reservations_exist);
+
+    let unavailable_timeslots_exist = sqlx::query(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name='UnavailableTimeSlots'",
+    )
+    .fetch_optional(&pool)
+    .await
+    .unwrap()
+    .is_some();
+    assert!(unavailable_timeslots_exist);
+
+    let admin_count = sqlx::query!("SELECT COUNT(*) FROM Users WHERE user_name = 'admin'")
+      .fetch_one(&pool)
+      .await
+      .unwrap()
+      .0;
+    assert_eq!(admin_count, 1);
+  }
+
+  #[tokio::test]
+  async fn test_insert_admin() {
+    let pool = Pool::connect("sqlite::memory:").await.unwrap();
+
+    // 清空 Users 表
+    sqlx::query("DELETE FROM Users")
+      .execute(&pool)
+      .await
+      .unwrap();
+
+    // 呼叫函式
+    insert_admin(&pool).await;
+
+    // 檢查 Admin 使用者是否已新增
+    let admin_user = sqlx::query_as!(
+      user::UserInfo,
+      "SELECT * FROM Users WHERE user_name = 'admin'"
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("Failed to fetch admin user");
+
+    assert_eq!(admin_user.user_name, "admin");
+    assert_ne!(admin_user.password_hash, "");
+    assert_eq!(admin_user.user_role, user::UserRole::Admin);
+    assert!(admin_user.verified);
+  }
+
+  #[tokio::test]
+  async fn test_clear_table() {
+    // 連線到一個記憶體資料庫
+    let pool = Pool::connect("sqlite::memory:").await.unwrap();
+
+    sqlx::query("CREATE TABLE TestTable1 (id INTEGER PRIMARY KEY)")
+      .execute(&pool)
+      .await
+      .unwrap();
+
+    sqlx::query("INSERT INTO TestTable1 (id) VALUES (1)")
+      .execute(&pool)
+      .await
+      .unwrap();
+
+    sqlx::query("CREATE TABLE TestTable2 (id INTEGER PRIMARY KEY)")
+      .execute(&pool)
+      .await
+      .unwrap();
+
+    sqlx::query("INSERT INTO TestTable2 (id) VALUES (1)")
+      .execute(&pool)
+      .await
+      .unwrap();
+
+    // 呼叫要測試的函式
+    super::clear_table(&pool).await;
+
+    // 檢查資料表是否已清空
+    let count: i64 = sqlx::query("SELECT COUNT(*) FROM TestTable1")
+      .fetch_one(&pool)
+      .await
+      .unwrap()
+      .get(0);
+
+    assert_eq!(0, count);
+
+    let count: i64 = sqlx::query("SELECT COUNT(*) FROM TestTable2")
+      .fetch_one(&pool)
+      .await
+      .unwrap()
+      .get(0);
+
+    assert_eq!(0, count);
+  }
+
+  #[tokio::test]
+  async fn test_init_unavailable_timeslots() {
+    // 連線測試資料庫
+    let pool = Pool::connect("sqlite::memory:").await.unwrap();
+
+    // 建立 UnavailableTimeSlots 表格
+    sqlx::query(
+      "CREATE TABLE UnavailableTimeSlots (
+            start_time INTEGER NOT NULL,
+            end_time INTEGER NOT NULL,
+            PRIMARY KEY (start_time, end_time)
+          )",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    sqlx::query("DELETE FROM UnavailableTimeSlots")
+      .execute(&pool)
+      .await
+      .unwrap();
+
+    let today = utils::get_today();
+
+    super::init_unavailable_timeslots(&pool).await;
+
+    let result =
+      sqlx::query_as::<_, (i64, i64)>("SELECT start_time, end_time FROM UnavailableTimeSlots")
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+
+    let mut expected = Vec::new();
+
+    let start_time = utils::naive_date_to_timestamp(today, 0, 0, 0).unwrap();
+    let end_time = utils::naive_date_to_timestamp(today, 9, 0, 0).unwrap();
+    expected.push((start_time, end_time));
+
+    let start_time = utils::naive_date_to_timestamp(today, 17, 0, 0).unwrap();
+    let end_time = utils::naive_date_to_timestamp(today, 23, 59, 59).unwrap();
+    expected.push((start_time, end_time));
+
+    assert_eq!(result, expected);
+  }
+
+  #[tokio::test]
+  async fn test_init_seat_info() {
+    let pool = Pool::connect("sqlite::memory:").await.unwrap();
+
+    sqlx::query("DELETE FROM Seats")
+      .execute(&pool)
+      .await
+      .unwrap();
+
+    super::init_seat_info(&pool).await;
+
+    let count: u16 = sqlx::query("SELECT COUNT(*) FROM Seats")
+      .fetch_one(&pool)
+      .await
+      .unwrap()
+      .get(0);
+
+    assert_eq!(count, constant::NUMBER_OF_SEATS);
+
+    let available: Vec<bool> = sqlx::query("SELECT available FROM Seats")
+      .fetch_all(&pool)
+      .await
+      .unwrap()
+      .into_iter()
+      .map(|r| r.get(0))
+      .collect();
+
+    assert!(available.into_iter().all(|a| a));
+  }
+}
